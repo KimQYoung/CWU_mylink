@@ -19,7 +19,7 @@ export default function Home() {
 
         {/* 소개글 */}
         <p className="mt-3 text-base leading-relaxed text-zinc-600 dark:text-zinc-400">
-          바이브 코딩을 공부하고 있는 컴퓨터공학과 2학년입니다.
+          문제를 코드로 해결하고 가치 있는 경험을 만드는 개발자입니다. 새로운 기술을 탐구하며 꾸준히 성장하고 있습니다.
         </p>
 
         {/* 구분선 */}
