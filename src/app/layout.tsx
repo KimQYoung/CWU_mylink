@@ -14,7 +14,7 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "김규영 | 마이링크",
-  description: "안녕하세요! 바이브 코딩을 배우고 있는 대학생 김규영의 마이링크입니다.",
+  description: "아이디어를 코드로 실현하는 개발자 김규영의 마이링크입니다.",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
