@@ -129,11 +129,11 @@ flowchart TD
 - **Framework**: Next.js 16 (App Router)
 - **Language**: TypeScript 5
 - **Styling**: Tailwind CSS v3 (안정성 및 고성능 보장)
+- **State Management**: **Zustand v5** (초경량 반응형 상태 관리, `persist` 미들웨어 기반 `localStorage` 자동 영속화 및 2-패널 선택자 최적화)
 - **Icons**: Lucide Icons / Custom SVG Icons
-- **State & Storage**: React Context / Custom Hooks + `window.localStorage` (Mock 데이터 자동 시딩)
 - **Data Visualization**: Pure Tailwind CSS + SVG Charts (별도 무거운 차트 패키지 없이 0ms 로딩)
 
-### 5.2 핵심 데이터 스키마 (TypeScript Types)
+### 5.2 핵심 데이터 스키마 및 Zustand 스토어 (TypeScript Types)
 ```typescript
 export type ThemeId = "xai" | "neobrutalism" | "modern";
 
@@ -145,7 +145,7 @@ export interface LinkItem {
   icon?: string;
   isActive: boolean;
   order: number;
-  clicks: number;          // 링크별 누적 클릭수 (신규 추가)
+  clicks: number;          // 링크별 누적 클릭수
 }
 
 export interface DailyStat {
@@ -168,7 +168,25 @@ export interface UserProfile {
   email: string;           // 연락처 이메일
   theme: ThemeId;          // 선택된 테마 프리셋
   links: LinkItem[];       // 관리 중인 링크 목록
-  analytics: AnalyticsSummary; // 통계 및 애널리틱스 데이터 (신규 추가)
+  analytics: AnalyticsSummary; // 통계 및 애널리틱스 데이터
+}
+
+// Zustand 전역 상태 및 액션 인터페이스
+export interface MyLinkState {
+  profile: UserProfile;
+  // 프로필 & 테마 액션
+  updateProfile: (data: Partial<Pick<UserProfile, "name" | "bio" | "avatarUrl" | "email">>) => void;
+  setTheme: (theme: ThemeId) => void;
+  // 링크 CRUD 및 정렬 액션
+  addLink: (link: Omit<LinkItem, "id" | "order" | "clicks">) => void;
+  updateLink: (id: string, data: Partial<Omit<LinkItem, "id">>) => void;
+  deleteLink: (id: string) => void;
+  toggleLinkActive: (id: string) => void;
+  reorderLinks: (sourceIndex: number, destinationIndex: number) => void;
+  // 애널리틱스 트래킹 액션
+  recordPageView: () => void;
+  recordLinkClick: (linkId: string) => void;
+  resetAnalytics: () => void;
 }
 ```
 
@@ -181,7 +199,7 @@ gantt
     title 마이링크 (MyLink) MVP + 통계 기능 구현 타임라인
     dateFormat  YYYY-MM-DD
     section Phase 1: 데이터 & 상태
-    데이터 모델 정의 및 LocalStorage 훅 개발 :p1, 2026-11-12, 1d
+    Zustand 스토어 모델 정의 및 persist 기반 LocalStorage 연동 :p1, 2026-11-12, 1d
     기본 목업 프로필 및 7일치 통계 시딩 :after p1, 1d
     section Phase 2: 대시보드 빌더
     2-패널 관리자 화면 레이아웃 (/admin) :p2, after p1, 1d
