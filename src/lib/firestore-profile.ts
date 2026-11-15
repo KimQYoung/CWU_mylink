@@ -302,6 +302,52 @@ export async function findUserByDisplayName(
   }
 }
 
+export interface PublicDisplayNameEntry {
+  displayName: string;
+  updatedAt?: number;
+}
+
+/**
+ * 사이트맵(sitemap.xml) 생성을 위해 공개된 `displayNames` 목록을 안전하게 조회합니다.
+ */
+export async function fetchPublicDisplayNameEntries(
+  maxCount: number = 500
+): Promise<PublicDisplayNameEntry[]> {
+  const db = getFirestoreDb();
+  if (!db) {
+    return [];
+  }
+
+  try {
+    const snapshot = await getDocs(
+      query(collection(db, DISPLAY_NAMES_COLLECTION), limit(maxCount))
+    );
+    const seen = new Set<string>();
+    const entries: PublicDisplayNameEntry[] = [];
+
+    for (const docSnap of snapshot.docs) {
+      const data = docSnap.data();
+      const rawName =
+        typeof data.displayName === "string" ? data.displayName : "";
+      const cleaned = sanitizeDisplayName(rawName);
+      const normalized = normalizeDisplayNameKey(cleaned);
+      if (!normalized || seen.has(normalized)) {
+        continue;
+      }
+      seen.add(normalized);
+      const updatedAt = extractTimestampMs(data.updatedAt);
+      entries.push({
+        displayName: cleaned,
+        ...(updatedAt > 0 ? { updatedAt } : {}),
+      });
+    }
+
+    return entries;
+  } catch {
+    return [];
+  }
+}
+
 /**
  * 입력한 Display Name이 다른 사용자와 중복되는지 Firestore에서 확인합니다.
  * - `displayNames/{docId}` 인덱스 문서를 1차로 조회하고, 필요 시 `users` 컬렉션을 보조 조회합니다.

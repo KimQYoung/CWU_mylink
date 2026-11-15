@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
+import { buildPublicProfileHref } from "@/lib/firestore-profile";
 import { resolvePublicProfileForOg, truncateText } from "@/lib/og-utils";
+import { createPageMetadata } from "@/lib/seo";
 import { PublicProfileClient } from "./public-profile-client";
 
 /**
@@ -11,25 +13,27 @@ export async function generateMetadata({
 }: PageProps<"/[displayName]">): Promise<Metadata> {
   const { displayName } = await params;
   const profileData = await resolvePublicProfileForOg(displayName);
-  const title = `${profileData.displayName} (@${profileData.displayName}) | 마이링크`;
+  const pageTitle = `${profileData.displayName} (@${profileData.displayName})`;
+  const socialTitle = `${pageTitle} | 마이링크`;
   const description = truncateText(profileData.bio, 155);
+  const profilePath = buildPublicProfileHref(profileData.displayName);
 
-  return {
-    title,
+  return createPageMetadata({
+    title: pageTitle,
+    socialTitle,
     description,
-    openGraph: {
-      type: "profile",
-      locale: "ko_KR",
-      siteName: "MyLink",
-      title,
-      description,
-    },
-    twitter: {
-      card: "summary_large_image",
-      title,
-      description,
-    },
-  };
+    path: profilePath,
+    keywords: [
+      profileData.displayName,
+      `@${profileData.displayName}`,
+      "마이링크",
+      "MyLink",
+      "개발자 프로필",
+      "링크 허브",
+    ],
+    openGraphType: "profile",
+    username: profileData.displayName,
+  });
 }
 
 export default async function PublicDisplayNamePage({
