@@ -46,6 +46,7 @@ export interface UserProfile {
   statementLead: string;      // 예: "아이디어를 코드로 실현하는 개발자 김규영입니다."
   statementBody: string;      // 상세 소개글
   avatarUrl: string;          // 예: "/avatar.png"
+  bio?: string;               // 한 줄 소개
   email: string;              // 연락처 이메일
   theme: ThemeId;             // 선택된 테마
   links: LinkItem[];          // 링크 목록

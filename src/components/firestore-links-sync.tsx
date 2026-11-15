@@ -15,6 +15,9 @@ export function FirestoreLinksSync() {
   const loadFirestoreLinks = useProfileStore(
     (state) => state.loadFirestoreLinks
   );
+  const loadFirestoreProfile = useProfileStore(
+    (state) => state.loadFirestoreProfile
+  );
 
   useEffect(() => {
     const auth = getFirebaseAuth();
@@ -30,6 +33,7 @@ export function FirestoreLinksSync() {
           const authUser = mapFirebaseUser(user);
           setAuthState("authenticated", authUser);
           void loadFirestoreLinks(authUser.uid);
+          void loadFirestoreProfile(authUser.uid);
         } else {
           setAuthState("unauthenticated", null);
         }
@@ -42,7 +46,7 @@ export function FirestoreLinksSync() {
     return () => {
       unsubscribe();
     };
-  }, [setAuthState, loadFirestoreLinks]);
+  }, [setAuthState, loadFirestoreLinks, loadFirestoreProfile]);
 
   return null;
 }

@@ -3,13 +3,12 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { ArrowLeft, Loader2, LogOut, Share2 } from "lucide-react";
+import { Share2 } from "lucide-react";
 import { AuthRequiredView } from "@/components/auth-required-view";
 import { FirestoreStatusBanner } from "@/components/firestore-status-banner";
-import { GoogleIcon } from "@/components/google-icon";
 import { LinkCard } from "@/components/link-card";
+import { SiteHeader } from "@/components/site-header";
 import { StatusToast } from "@/components/status-toast";
-import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { UserAvatar } from "@/components/user-avatar";
@@ -22,9 +21,6 @@ import { useHydrated } from "@/lib/use-hydrated";
 import { cn } from "@/lib/utils";
 import type { LinkItem } from "@/types";
 
-const NAV_BUTTON_CLASS =
-  "border-white/25 bg-transparent text-ink hover:border-white hover:bg-canvas-soft/60";
-
 export default function PublicProfilePage() {
   const params = useParams<{ username: string }>();
   const rawUsername = params?.username ?? "";
@@ -33,11 +29,6 @@ export default function PublicProfilePage() {
   const hasMounted = useHydrated();
   const authStatus = useProfileStore((state) => state.authStatus);
   const authUser = useProfileStore((state) => state.authUser);
-  const isAuthSubmitting = useProfileStore((state) => state.isAuthSubmitting);
-  const signInWithGoogleAction = useProfileStore(
-    (state) => state.signInWithGoogleAction
-  );
-  const signOutAction = useProfileStore((state) => state.signOutAction);
   const storeProfile = useProfileStore((state) => state.profile);
   const firestoreStatus = useProfileStore((state) => state.firestoreStatus);
   const firestoreError = useProfileStore((state) => state.firestoreError);
@@ -111,220 +102,115 @@ export default function PublicProfilePage() {
   if (!isAuthenticated) {
     return (
       <div className="min-h-screen w-full bg-canvas text-ink flex flex-col font-sans">
-        <header className="sticky top-0 z-40 w-full border-b border-hairline bg-canvas/90 backdrop-blur-md">
-          <div className="mx-auto flex min-h-14 max-w-5xl items-center justify-between gap-2 px-4 py-2.5 sm:px-8">
-            <div className="flex items-center gap-2">
-              <Link
-                href="/"
-                className={cn(
-                  buttonVariants({ variant: "outline", size: "xs" }),
-                  NAV_BUTTON_CLASS
-                )}
-              >
-                <ArrowLeft className="size-3.5" strokeWidth={1.5} />
-                <span>마이페이지</span>
-              </Link>
-              <Link
-                href="/links"
-                className={cn(
-                  buttonVariants({ variant: "outline", size: "xs" }),
-                  NAV_BUTTON_CLASS
-                )}
-              >
-                Links
-              </Link>
-            </div>
+        <SiteHeader onToast={showToast} />
 
-            <Button
-              type="button"
-              size="xs"
-              variant="default"
-              disabled={isAuthSubmitting || authStatus === "loading"}
-              onClick={() => void signInWithGoogleAction()}
-            >
-              {isAuthSubmitting ? (
-                <Loader2 className="size-3.5 animate-spin" strokeWidth={1.75} />
-              ) : (
-                <GoogleIcon className="size-3.5" />
-              )}
-              <span>Google 로그인</span>
-            </Button>
-          </div>
-        </header>
-
-        <main className="mx-auto w-full max-w-5xl px-4 sm:px-8 py-10 sm:py-20 flex-1">
+        <main className="mx-auto w-full max-w-5xl px-4 sm:px-8 flex-1 flex flex-col">
           <AuthRequiredView
-            eyebrow="// PROFILE ACCESS · AUTHENTICATION REQUIRED"
-            title="로그인 후 개인화 프로필을 확인할 수 있습니다"
-            description={`@${decodedUsername} 프로필과 개인화된 Firestore 경로(users/{user.uid}/links) 데이터를 확인하려면 Google 계정으로 먼저 로그인해 주세요.`}
+            description={`@${decodedUsername} 프로필을 확인하려면\nGoogle 계정으로 먼저 로그인해 주세요.`}
           />
         </main>
+
+        <footer className="py-8 px-4 text-center">
+          <p className="font-mono text-xs text-body-mid">
+            © {new Date().getFullYear()} MyLink. All rights reserved.
+          </p>
+        </footer>
       </div>
     );
   }
 
   if (!isMatchedUser) {
     return (
-      <div className="min-h-screen w-full bg-canvas text-ink flex flex-col items-center justify-center px-6">
-        <Card className="w-full max-w-md p-8 space-y-5 text-center">
-          <p className="font-mono text-xs uppercase tracking-[1.4px] text-body-mid">
-            {"// 404 ENDPOINT NOT FOUND"}
-          </p>
-          <h1 className="text-2xl font-normal tracking-[-0.02em] text-ink">
-            @{decodedUsername} 프로필을 찾을 수 없습니다
-          </h1>
-          <p className="text-sm text-body-mid leading-relaxed">
-            현재 로그인된 계정의 프로필 경로는{" "}
-            <span className="font-mono text-ink">@{profile.username}</span>{" "}
-            ({linksPath})입니다.
-          </p>
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-2.5 pt-2">
-            <Link
-              href={`/${profile.username}`}
-              className={cn(
-                buttonVariants({ variant: "default" }),
-                "w-full sm:w-auto"
-              )}
-            >
-              Go to @{profile.username}
-            </Link>
-            <Link
-              href="/links"
-              className={cn(
-                buttonVariants({ variant: "outline" }),
-                "w-full sm:w-auto"
-              )}
-            >
-              View All Links
-            </Link>
-          </div>
-        </Card>
+      <div className="min-h-screen w-full bg-canvas text-ink flex flex-col font-sans">
+        <SiteHeader onToast={showToast} />
+
+        <main className="flex-1 flex flex-col items-center justify-center px-6">
+          <Card className="w-full max-w-md p-8 space-y-5 text-center">
+            <p className="font-mono text-xs uppercase tracking-[1.4px] text-body-mid">
+              {"// 404 ENDPOINT NOT FOUND"}
+            </p>
+            <h1 className="text-2xl font-normal tracking-[-0.02em] text-ink">
+              @{decodedUsername} 프로필을 찾을 수 없습니다
+            </h1>
+            <p className="text-sm text-body-mid leading-relaxed">
+              현재 로그인된 계정의 프로필 경로는{" "}
+              <span className="font-mono text-ink">@{profile.username}</span>
+              입니다.
+            </p>
+            <div className="flex flex-col sm:flex-row items-center justify-center gap-2.5 pt-2">
+              <Link
+                href={`/${profile.username}`}
+                className={cn(
+                  buttonVariants({ variant: "default" }),
+                  "w-full sm:w-auto"
+                )}
+              >
+                Go to @{profile.username}
+              </Link>
+              <Link
+                href="/"
+                className={cn(
+                  buttonVariants({ variant: "outline" }),
+                  "w-full sm:w-auto"
+                )}
+              >
+                마이페이지로 이동
+              </Link>
+            </div>
+          </Card>
+        </main>
       </div>
     );
   }
 
   return (
     <div className="min-h-screen w-full bg-canvas text-ink flex flex-col font-sans">
-      {/* Top Bar */}
-      <header className="sticky top-0 z-40 w-full border-b border-hairline bg-canvas/90 backdrop-blur-md">
-        <div className="mx-auto flex min-h-14 max-w-2xl items-center justify-between gap-2 px-4 py-2.5 sm:px-6">
-          <div className="flex items-center gap-2">
-            <Link
-              href="/links"
-              className={cn(
-                buttonVariants({ variant: "outline", size: "xs" }),
-                NAV_BUTTON_CLASS
-              )}
-            >
-              <ArrowLeft className="size-3.5" strokeWidth={1.5} />
-              <span>Links</span>
-            </Link>
-            <Link
-              href="/"
-              className={cn(
-                buttonVariants({ variant: "outline", size: "xs" }),
-                NAV_BUTTON_CLASS
-              )}
-            >
-              마이페이지
-            </Link>
-          </div>
+      <SiteHeader
+        onToast={showToast}
+        rightSlot={
+          <Button
+            type="button"
+            size="icon-sm"
+            variant="outline"
+            onClick={handleCopyPageUrl}
+            aria-label="프로필 링크 복사"
+          >
+            <Share2 className="size-3.5" strokeWidth={1.5} />
+          </Button>
+        }
+      />
 
-          <div className="flex items-center gap-2">
-            <Button
-              type="button"
-              size="xs"
-              variant="outline"
-              disabled={isAuthSubmitting}
-              onClick={() => void signOutAction()}
-              className={NAV_BUTTON_CLASS}
-            >
-              <LogOut className="size-3" strokeWidth={1.5} />
-              <span>로그아웃</span>
-            </Button>
+      <main className="mx-auto w-full max-w-md flex-1 px-4 sm:px-6 py-10 sm:py-16 space-y-7">
+        {/* 중앙 정렬 공개 프로필 헤더 */}
+        <section className="flex flex-col items-center text-center space-y-3">
+          <UserAvatar
+            src={profile.avatarUrl || authUser?.photoURL}
+            name={profile.name}
+            size={84}
+            priority
+          />
 
-            <Button
-              type="button"
-              size="xs"
-              variant="outline"
-              onClick={handleCopyPageUrl}
-              aria-label="프로필 링크 복사"
-              className={cn("sm:hidden", NAV_BUTTON_CLASS)}
-            >
-              <Share2 className="size-3.5" strokeWidth={1.5} />
-              <span>Share</span>
-            </Button>
-            <Button
-              type="button"
-              size="icon-sm"
-              variant="outline"
-              onClick={handleCopyPageUrl}
-              aria-label="프로필 링크 복사"
-              className={cn("hidden sm:inline-flex", NAV_BUTTON_CLASS)}
-            >
-              <Share2 className="size-3.5" strokeWidth={1.5} />
-            </Button>
-          </div>
-        </div>
-      </header>
-
-      {/* Main Linktree Profile Surface */}
-      <main className="mx-auto w-full max-w-xl flex-1 px-4 sm:px-6 py-8 sm:py-12 space-y-6">
-        {/* Profile Summary Card */}
-        <Card className="rounded-lg border border-hairline bg-canvas-card p-6 shadow-none">
-          <div className="flex flex-col items-center text-center space-y-4">
-            <UserAvatar
-              src={authUser?.photoURL}
-              name={profile.name}
-              size={80}
-              priority
-            />
-
-            <div className="space-y-1.5">
-              <p className="font-mono text-xs uppercase tracking-[1.4px] text-body-mid">
-                {"//"} {profile.discipline}
-              </p>
-              <h1 className="text-3xl sm:text-4xl font-normal tracking-[-0.03em] text-ink">
-                {profile.name}
-              </h1>
-              <p className="font-mono text-xs text-body-mid">
-                {profile.callsign}
-                {authUser?.email ? ` · ${authUser.email}` : ""}
-              </p>
-            </div>
-
-            <Badge className="border-hairline bg-canvas-soft px-3 py-1 text-sunset">
-              <span className="size-1.5 rounded-full bg-current" />
-              <span>{profile.status}</span>
-            </Badge>
-
-            <p className="font-mono text-[11px] text-body-mid break-all">
-              {linksPath}
-            </p>
-
-            <p className="text-sm sm:text-base font-normal text-body leading-relaxed">
-              {profile.headline}
+          <div className="space-y-1">
+            <h1 className="text-2xl sm:text-3xl font-normal tracking-[-0.03em] text-ink">
+              {profile.name}
+            </h1>
+            <p className="font-mono text-xs text-body-mid">
+              {profile.callsign}
             </p>
           </div>
-        </Card>
 
-        {/* Active Link List Header */}
-        <div className="flex items-center justify-between px-1">
-          <span className="font-mono text-xs uppercase tracking-[1.4px] text-body-mid">
-            {"// VERIFIED LINKS"}
-          </span>
-          <div className="flex items-center gap-2">
-            {isLoadingLinks && (
-              <Loader2
-                className="size-3.5 animate-spin opacity-75"
-                strokeWidth={1.75}
-              />
-            )}
-            <span className="font-mono text-xs uppercase tracking-[1.4px] text-body-mid">
-              {activeLinks.length} ACTIVE
-            </span>
-          </div>
-        </div>
+          {profile.bio?.trim() && (
+            <p className="text-sm font-normal text-body max-w-sm leading-relaxed break-words">
+              {profile.bio}
+            </p>
+          )}
+
+          {authUser?.email && (
+            <p className="text-sm font-normal text-body-mid">
+              {authUser.email}
+            </p>
+          )}
+        </section>
 
         <FirestoreStatusBanner
           isLoading={isLoadingLinks}
@@ -334,24 +220,24 @@ export default function PublicProfilePage() {
           theme="xai"
         />
 
-        {/* Link Stack */}
+        {/* 공개 링크 목록 */}
         <section
           aria-label="공개 링크 목록"
           className={cn(
-            "space-y-3 transition-opacity",
+            "space-y-2.5 transition-opacity",
             isLoadingLinks && "opacity-65"
           )}
         >
-          {activeLinks.length === 0 ? (
-            <Card className="rounded-lg border border-hairline bg-canvas-card p-6 shadow-none text-center space-y-4">
-              <p className="text-sm sm:text-base font-normal text-body leading-relaxed">
-                현재 공개된 링크가 없습니다. ({linksPath})
+          {activeLinks.length === 0 && !isLoadingLinks ? (
+            <Card className="p-7 text-center space-y-4">
+              <p className="text-sm font-normal text-body">
+                현재 공개된 링크가 없습니다.
               </p>
               <Link
-                href="/links"
-                className={buttonVariants({ variant: "outline" })}
+                href="/"
+                className={buttonVariants({ variant: "outline", size: "sm" })}
               >
-                Manage Links
+                마이페이지에서 링크 추가
               </Link>
             </Card>
           ) : (
@@ -360,7 +246,7 @@ export default function PublicProfilePage() {
                 key={link.id}
                 link={link}
                 index={index}
-                mode="public"
+                mode="mypage"
                 theme="xai"
                 copied={copiedId === link.id}
                 onCopyEmail={handleCopyEmail}
@@ -371,9 +257,9 @@ export default function PublicProfilePage() {
         </section>
       </main>
 
-      <footer className="py-6 px-4 text-center text-body-mid border-t border-hairline bg-canvas">
-        <p className="font-mono text-[11px] uppercase tracking-[1.2px]">
-          {profile.name.toUpperCase()} {"//"} {linksPath}
+      <footer className="py-8 px-4 text-center">
+        <p className="font-mono text-xs text-body-mid">
+          © {new Date().getFullYear()} MyLink. All rights reserved.
         </p>
       </footer>
 

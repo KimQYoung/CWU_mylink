@@ -2,6 +2,7 @@
 
 import Image from "next/image";
 import { Avatar } from "@base-ui/react/avatar";
+import { parseProfileAvatarUrl } from "@/lib/schemas/profile";
 import { cn } from "@/lib/utils";
 
 interface UserAvatarProps {
@@ -23,7 +24,9 @@ export function UserAvatar({
   className,
   priority = false,
 }: UserAvatarProps) {
-  const normalizedSrc = src?.trim() || "";
+  const rawSrc = src?.trim() || "";
+  const parsedSrc = parseProfileAvatarUrl(rawSrc);
+  const normalizedSrc = parsedSrc.valid ? parsedSrc.url : "";
   const fallbackInitial = (name?.trim().charAt(0) || "M").toUpperCase();
 
   return (
@@ -36,6 +39,7 @@ export function UserAvatar({
     >
       {normalizedSrc && (
         <Avatar.Image
+          key={normalizedSrc}
           src={normalizedSrc}
           alt={`${name || "사용자"} 프로필 이미지`}
           keepMounted

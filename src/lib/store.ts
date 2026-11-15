@@ -9,6 +9,15 @@ import {
   type AuthUserInfo,
 } from "./firebase-auth";
 import {
+  fetchUserProfile,
+  getProfileFirestoreErrorMessage,
+  getUserProfilePath,
+  saveUserProfile,
+  type FirestoreUserProfile,
+  type SaveUserProfileInput,
+} from "./firestore-profile";
+import { sanitizeDisplayName } from "./schemas/profile";
+import {
   createUserLink,
   deleteUserLink,
   fetchUserLinks,
@@ -34,6 +43,7 @@ export type AuthStatus = "loading" | "authenticated" | "unauthenticated";
 export type FirestoreSyncStatus = "idle" | "syncing" | "connected" | "error";
 
 let latestLoadRequestId = 0;
+let latestProfileRequestId = 0;
 
 function getTodayDateString(): string {
   return new Date().toISOString().slice(0, 10);
@@ -94,6 +104,7 @@ export const DEFAULT_PROFILE: UserProfile = {
   statementBody:
     "상단 헤더 또는 페이지 내 로그인 버튼을 통해 Google 계정을 연동하면 사용자 고유 UID 기반의 링크 디렉토리가 즉시 활성화됩니다.",
   avatarUrl: "/avatar.png",
+  bio: "",
   email: "",
   theme: "xai",
   capabilities: [
@@ -128,7 +139,8 @@ export const DEFAULT_PROFILE: UserProfile = {
 export function buildProfileForAuthUser(
   user: AuthUserInfo | null,
   links: LinkItem[] = [],
-  currentAnalytics?: AnalyticsSummary
+  currentAnalytics?: AnalyticsSummary,
+  customProfile?: FirestoreUserProfile | null
 ): UserProfile {
   if (!user) {
     return {
@@ -138,10 +150,14 @@ export function buildProfileForAuthUser(
     };
   }
 
-  const displayName = getDisplayNameFromAuthUser(user);
+  const displayName =
+    customProfile?.displayName?.trim() || getDisplayNameFromAuthUser(user);
   const username = deriveUsernameFromAuthUser(user);
   const callsign = deriveCallsignFromAuthUser(user);
   const linksPath = getUserLinksPath(user.uid);
+  const bio = customProfile?.bio?.trim() ?? "";
+  const avatarUrl =
+    customProfile?.avatarUrl?.trim() || user.photoURL || "/avatar.png";
 
   return {
     ...DEFAULT_PROFILE,
@@ -155,7 +171,8 @@ export function buildProfileForAuthUser(
       : `Firestore 경로(${linksPath})에 연결된 개인화 마이페이지입니다.`,
     statementLead: `${displayName}님의 개인화된 마이페이지입니다.`,
     statementBody: `Google 소셜 로그인 계정(${user.email ?? user.uid})으로 인증되었으며, 모든 링크와 클릭 통계는 Cloud Firestore(${linksPath}) 경로에 안전하게 분리 저장됩니다.`,
-    avatarUrl: user.photoURL || "/avatar.png",
+    avatarUrl,
+    bio,
     email: user.email ?? "",
     links: sortLinksByCreatedAtDesc(links),
     analytics: currentAnalytics ?? DUMMY_ANALYTICS,
@@ -228,6 +245,9 @@ interface ProfileStore {
   isAuthSubmitting: boolean;
   authError: string | null;
   profile: UserProfile;
+  customProfile: FirestoreUserProfile | null;
+  isProfileLoading: boolean;
+  profileError: string | null;
   firestoreLinks: LinkItem[];
   firestoreStatus: FirestoreSyncStatus;
   firestoreError: string | null;
@@ -239,6 +259,10 @@ interface ProfileStore {
   signOutAction: () => Promise<void>;
   clearAuthError: () => void;
   // Firestore 조회 및 상태 액션
+  loadFirestoreProfile: (uid?: string) => Promise<void>;
+  saveProfile: (
+    input: Omit<SaveUserProfileInput, "email">
+  ) => Promise<FirestoreUserProfile>;
   loadFirestoreLinks: (uid?: string) => Promise<void>;
   setFirestoreLinks: (links: LinkItem[]) => void;
   setFirestoreSyncState: (
@@ -341,6 +365,9 @@ export const useProfileStore = create<ProfileStore>()((set, get) => ({
   isAuthSubmitting: false,
   authError: null,
   profile: DEFAULT_PROFILE,
+  customProfile: null,
+  isProfileLoading: false,
+  profileError: null,
   firestoreLinks: [],
   firestoreStatus: "idle",
   firestoreError: null,
@@ -351,9 +378,13 @@ export const useProfileStore = create<ProfileStore>()((set, get) => ({
     set((state) => {
       if (status === "unauthenticated" || !user) {
         latestLoadRequestId += 1;
+        latestProfileRequestId += 1;
         return {
           authStatus: status,
           authUser: null,
+          customProfile: null,
+          isProfileLoading: false,
+          profileError: null,
           firestoreLinks: [],
           firestoreStatus: "idle",
           firestoreError: null,
@@ -365,14 +396,19 @@ export const useProfileStore = create<ProfileStore>()((set, get) => ({
 
       const isSameUser = state.authUser?.uid === user.uid;
       const nextLinks = isSameUser ? state.firestoreLinks : [];
+      const nextCustomProfile = isSameUser ? state.customProfile : null;
       if (!isSameUser) {
         latestLoadRequestId += 1;
+        latestProfileRequestId += 1;
       }
 
       return {
         authStatus: status,
         authUser: user,
         authError: null,
+        customProfile: nextCustomProfile,
+        isProfileLoading: isSameUser ? state.isProfileLoading : false,
+        profileError: isSameUser ? state.profileError : null,
         firestoreLinks: nextLinks,
         firestoreStatus: isSameUser ? state.firestoreStatus : "idle",
         firestoreError: isSameUser ? state.firestoreError : null,
@@ -380,7 +416,8 @@ export const useProfileStore = create<ProfileStore>()((set, get) => ({
         profile: buildProfileForAuthUser(
           user,
           nextLinks,
-          state.profile.analytics
+          state.profile.analytics,
+          nextCustomProfile
         ),
       };
     });
@@ -399,15 +436,18 @@ export const useProfileStore = create<ProfileStore>()((set, get) => ({
       set((state) => {
         const isSameUser = state.authUser?.uid === user.uid;
         const nextLinks = isSameUser ? state.firestoreLinks : [];
+        const nextCustomProfile = isSameUser ? state.customProfile : null;
         return {
           authStatus: "authenticated",
           authUser: user,
           isAuthSubmitting: false,
           authError: null,
+          customProfile: nextCustomProfile,
           profile: buildProfileForAuthUser(
             user,
             nextLinks,
-            state.profile.analytics
+            state.profile.analytics,
+            nextCustomProfile
           ),
         };
       });
@@ -432,11 +472,15 @@ export const useProfileStore = create<ProfileStore>()((set, get) => ({
     try {
       await signOutGoogle();
       latestLoadRequestId += 1;
+      latestProfileRequestId += 1;
       set((state) => ({
         authStatus: "unauthenticated",
         authUser: null,
         isAuthSubmitting: false,
         authError: null,
+        customProfile: null,
+        isProfileLoading: false,
+        profileError: null,
         firestoreLinks: [],
         firestoreStatus: "idle",
         firestoreError: null,
@@ -453,6 +497,110 @@ export const useProfileStore = create<ProfileStore>()((set, get) => ({
   },
 
   clearAuthError: () => set({ authError: null }),
+
+  loadFirestoreProfile: async (uid) => {
+    const targetUid = uid ?? get().authUser?.uid;
+    if (!targetUid) {
+      latestProfileRequestId += 1;
+      set((state) => ({
+        customProfile: null,
+        isProfileLoading: false,
+        profileError: null,
+        profile: buildProfileForAuthUser(
+          state.authUser,
+          state.firestoreLinks,
+          state.profile.analytics,
+          null
+        ),
+      }));
+      return;
+    }
+
+    const requestId = ++latestProfileRequestId;
+    const profilePath = getUserProfilePath(targetUid);
+    set({
+      isProfileLoading: true,
+      profileError: null,
+    });
+
+    try {
+      const fetchedProfile = await fetchUserProfile(targetUid);
+      if (
+        requestId !== latestProfileRequestId ||
+        get().authUser?.uid !== targetUid
+      ) {
+        return;
+      }
+
+      set((state) => ({
+        customProfile: fetchedProfile,
+        isProfileLoading: false,
+        profileError: null,
+        profile: buildProfileForAuthUser(
+          state.authUser,
+          state.firestoreLinks,
+          state.profile.analytics,
+          fetchedProfile
+        ),
+      }));
+    } catch (error) {
+      if (
+        requestId !== latestProfileRequestId ||
+        get().authUser?.uid !== targetUid
+      ) {
+        return;
+      }
+
+      set({
+        isProfileLoading: false,
+        profileError: getProfileFirestoreErrorMessage(error, profilePath),
+      });
+    }
+  },
+
+  saveProfile: async (input) => {
+    const uid = requireAuthenticatedUid(get);
+    const currentState = get();
+    const currentAuthUser = currentState.authUser;
+    const currentCustomProfile = currentState.customProfile;
+
+    const cleanedDisplayName = sanitizeDisplayName(input.displayName);
+    const cleanedBio = input.bio.trim();
+    const cleanedAvatarUrl = input.avatarUrl.trim();
+
+    if (
+      currentCustomProfile &&
+      currentCustomProfile.displayName === cleanedDisplayName &&
+      currentCustomProfile.bio === cleanedBio &&
+      currentCustomProfile.avatarUrl === cleanedAvatarUrl
+    ) {
+      return currentCustomProfile;
+    }
+
+    const saved = await saveUserProfile(uid, {
+      ...input,
+      email: currentAuthUser?.email ?? null,
+    });
+
+    set((state) => {
+      const nextAuthUser = state.authUser
+        ? { ...state.authUser, displayName: saved.displayName }
+        : null;
+      return {
+        authUser: nextAuthUser,
+        customProfile: saved,
+        profileError: null,
+        profile: buildProfileForAuthUser(
+          nextAuthUser,
+          state.firestoreLinks,
+          state.profile.analytics,
+          saved
+        ),
+      };
+    });
+
+    return saved;
+  },
 
   loadFirestoreLinks: async (uid) => {
     const targetUid = uid ?? get().authUser?.uid;
@@ -826,7 +974,8 @@ export const useProfileStore = create<ProfileStore>()((set, get) => ({
       profile: buildProfileForAuthUser(
         state.authUser,
         state.firestoreLinks,
-        state.profile.analytics
+        state.profile.analytics,
+        state.customProfile
       ),
     })),
 }));

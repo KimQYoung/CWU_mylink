@@ -18,7 +18,7 @@ import type { LinkItem, ThemeId } from "@/types";
 interface LinkCardProps {
   link: LinkItem;
   index: number;
-  mode?: "directory" | "public";
+  mode?: "directory" | "public" | "mypage";
   theme?: ThemeId;
   copied?: boolean;
   isUpdating?: boolean;
@@ -112,6 +112,7 @@ export function LinkCard({
   const label = link.endpointLabel || `ENDPOINT ${endpointNumber}`;
   const display = link.displayUrl || link.url || "";
   const isDirectory = mode === "directory";
+  const isMyPage = mode === "mypage";
   const isBusy = isUpdating || isDeleting;
   const hasManagementActions = Boolean(onEditStart || onDeleteRequest);
   const showManagementFooter =
@@ -138,6 +139,99 @@ export function LinkCard({
           onCancel={() => onEditCancel?.()}
           onSave={onSaveEdit}
         />
+      </Card>
+    );
+  }
+
+  if (isMyPage) {
+    const compactTrigger = isCopyEmailAction ? (
+      <button
+        type="button"
+        onClick={() => onCopyEmail?.(link)}
+        aria-label={`${link.title} 이메일 복사`}
+        className={cn(
+          "absolute inset-0 z-0 rounded-[inherit] focus-visible:outline-none cursor-pointer",
+          themeStyles.focusRing
+        )}
+      />
+    ) : link.url ? (
+      <a
+        href={link.url}
+        target="_blank"
+        rel="noopener noreferrer"
+        onClick={() => onLinkClick?.(link)}
+        aria-label={`${link.title} 새 탭에서 열기`}
+        className={cn(
+          "absolute inset-0 z-0 rounded-[inherit] focus-visible:outline-none",
+          themeStyles.focusRing
+        )}
+      />
+    ) : null;
+
+    return (
+      <Card
+        className={cn(
+          "relative group flex flex-row items-center justify-between gap-3 rounded-lg border border-hairline bg-canvas-card px-4 py-3.5 shadow-none hover:border-white/35 hover:bg-canvas-soft/60 transition-colors",
+          hasPrimaryAction && "cursor-pointer",
+          !link.isActive && "opacity-65 border-dashed"
+        )}
+      >
+        {compactTrigger}
+
+        <div className="flex items-center gap-3.5 min-w-0 flex-1">
+          <div className="size-9 rounded-lg border border-hairline bg-canvas-soft text-ink flex items-center justify-center shrink-0">
+            <LinkIcon icon={link.icon} />
+          </div>
+          <div className="min-w-0 flex-1">
+            <h3 className="text-sm sm:text-base font-normal tracking-[-0.015em] text-ink truncate">
+              {link.title}
+            </h3>
+            {copied && (
+              <span className="font-mono text-[11px] text-emerald-400">
+                COPIED TO CLIPBOARD
+              </span>
+            )}
+          </div>
+        </div>
+
+        {hasManagementActions && (
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="relative z-10 flex items-center gap-1 shrink-0"
+          >
+            {onEditStart && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-sm"
+                disabled={isBusy}
+                onClick={() => onEditStart(link)}
+                aria-label={`${link.title} 수정`}
+                className="size-8 text-body-mid hover:text-ink"
+              >
+                <Pencil className="size-3.5" strokeWidth={1.5} />
+              </Button>
+            )}
+            {onDeleteRequest && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-sm"
+                disabled={isBusy}
+                aria-busy={isDeleting}
+                onClick={() => onDeleteRequest(link)}
+                aria-label={`${link.title} 삭제`}
+                className="size-8 text-body-mid hover:text-red-400 hover:bg-red-500/10"
+              >
+                {isDeleting ? (
+                  <Loader2 className="size-3.5 animate-spin" strokeWidth={1.5} />
+                ) : (
+                  <Trash2 className="size-3.5" strokeWidth={1.5} />
+                )}
+              </Button>
+            )}
+          </div>
+        )}
       </Card>
     );
   }

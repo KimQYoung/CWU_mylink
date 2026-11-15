@@ -24,7 +24,6 @@ import { Button, buttonVariants } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
-import { UserAvatar } from "@/components/user-avatar";
 import {
   getUserLinksPath,
   sortLinksByCreatedAtDesc,
@@ -189,18 +188,14 @@ export default function LinksPage() {
 
   return (
     <div className="min-h-screen w-full bg-canvas text-ink font-sans selection:bg-white/20 selection:text-white flex flex-col">
-      <SiteHeader
-        profileName={profile.name}
-        username={profile.username}
-        activeRoute="links"
-      />
+      <SiteHeader onToast={showToast} />
 
       <main className="mx-auto w-full max-w-5xl px-4 sm:px-8 py-8 sm:py-16 flex-1 flex flex-col space-y-8 sm:space-y-10">
         {!isAuthenticated ? (
           <AuthRequiredView
-            eyebrow="// LINK DIRECTORY · AUTHENTICATION REQUIRED"
-            title="로그인 후 링크 디렉토리를 사용할 수 있습니다"
-            description="전체 링크 목록 조회, 추가, 수정, 삭제 및 공개 상태 전환 기능은 Google 계정 로그인 후 사용할 수 있습니다. 로그인하면 내 UID 경로(users/{user.uid}/links)가 연결됩니다."
+            description={
+              "전체 링크 목록 조회, 검색, 공개 상태 전환은\nGoogle 로그인 이후 사용할 수 있습니다."
+            }
           />
         ) : (
           <>
@@ -254,40 +249,6 @@ export default function LinksPage() {
                   </Button>
                 </div>
               </div>
-
-              {/* AUTHENTICATED USER INFO STRIP */}
-              <Card className="p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                <div className="flex items-center gap-3.5 min-w-0">
-                  <UserAvatar
-                    src={authUser?.photoURL}
-                    name={profile.name}
-                    size={44}
-                  />
-                  <div className="min-w-0 space-y-0.5">
-                    <p className="text-sm font-normal text-ink truncate">
-                      {profile.name}
-                    </p>
-                    <p className="font-mono text-xs text-body-mid truncate">
-                      {authUser?.email || profile.callsign}
-                    </p>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-6 font-mono text-[11px]">
-                  <div className="min-w-0">
-                    <span className="block text-body-mid uppercase tracking-[1.2px]">
-                      USER UID
-                    </span>
-                    <span className="text-body break-all">{authUser?.uid}</span>
-                  </div>
-                  <div className="min-w-0">
-                    <span className="block text-body-mid uppercase tracking-[1.2px]">
-                      FIRESTORE PATH
-                    </span>
-                    <span className="text-sunset break-all">{linksPath}</span>
-                  </div>
-                </div>
-              </Card>
 
               {/* KPI TELEMETRY STRIP */}
               <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 pt-1">
