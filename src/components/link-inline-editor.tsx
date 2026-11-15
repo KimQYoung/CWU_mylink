@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import {
   FIRESTORE_LINKS_PATH,
+  formatLinkTimestamp,
   getFirestoreErrorMessage,
   type UpdateAnonymousLinkInput,
 } from "@/lib/firestore-links";
@@ -46,6 +47,7 @@ export function LinkInlineEditor({
   onSave,
 }: LinkInlineEditorProps) {
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const formattedUpdatedAt = formatLinkTimestamp(link.updatedAt);
 
   const schema = useMemo(
     () => createEditLinkSchema(existingLinks, link.id),
@@ -109,7 +111,9 @@ export function LinkInlineEditor({
           </Badge>
         </div>
         <span className="font-mono text-[10px] uppercase tracking-[1.2px] text-body-mid">
-          {FIRESTORE_LINKS_PATH}
+          {formattedUpdatedAt
+            ? `UPDATED ${formattedUpdatedAt} · ${FIRESTORE_LINKS_PATH}`
+            : FIRESTORE_LINKS_PATH}
         </span>
       </div>
 

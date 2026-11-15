@@ -213,10 +213,14 @@ function toggleLinkState(
   if (!target) return;
 
   const nextIsActive = !target.isActive;
+  const previousUpdatedAt = target.updatedAt;
+  const optimisticUpdatedAt = Date.now();
 
   set((current) => {
     const nextFirestoreLinks = current.firestoreLinks.map((link) =>
-      link.id === id ? { ...link, isActive: nextIsActive } : link
+      link.id === id
+        ? { ...link, isActive: nextIsActive, updatedAt: optimisticUpdatedAt }
+        : link
     );
     return {
       firestoreLinks: nextFirestoreLinks,
@@ -233,7 +237,9 @@ function toggleLinkState(
       // Firestore 업데이트 실패 시 상태를 원복합니다.
       set((current) => {
         const revertedFirestoreLinks = current.firestoreLinks.map((link) =>
-          link.id === id ? { ...link, isActive: !nextIsActive } : link
+          link.id === id
+            ? { ...link, isActive: !nextIsActive, updatedAt: previousUpdatedAt }
+            : link
         );
         return {
           firestoreLinks: revertedFirestoreLinks,
@@ -356,6 +362,7 @@ export const useProfileStore = create<ProfileStore>()((set, get) => ({
       buttonText,
       icon,
       isActive: input.isActive,
+      updatedAt: Date.now(),
     };
 
     try {

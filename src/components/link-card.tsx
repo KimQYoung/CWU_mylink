@@ -8,7 +8,10 @@ import { Switch } from "@/components/ui/switch";
 import { LinkIcon } from "@/components/link-icon";
 import { LinkInlineEditor } from "@/components/link-inline-editor";
 import { CopyFeedbackContent } from "@/components/status-toast";
-import type { UpdateAnonymousLinkInput } from "@/lib/firestore-links";
+import {
+  formatLinkTimestamp,
+  type UpdateAnonymousLinkInput,
+} from "@/lib/firestore-links";
 import { cn } from "@/lib/utils";
 import type { LinkItem, ThemeId } from "@/types";
 
@@ -115,6 +118,7 @@ export function LinkCard({
   const isDirectory = mode === "directory";
   const isBusy = isUpdating || isDeleting;
   const hasManagementActions = Boolean(onEditStart || onDeleteRequest);
+  const formattedUpdatedAt = formatLinkTimestamp(link.updatedAt);
   const themeStyles = PUBLIC_THEME_CARD[theme];
 
   if (isEditing && onSaveEdit) {
@@ -201,6 +205,14 @@ export function LinkCard({
           {link.description && (
             <p className={cn(themeStyles.desc, "max-w-2xl")}>
               {link.description}
+            </p>
+          )}
+          {formattedUpdatedAt && (isDirectory || hasManagementActions) && (
+            <p
+              title={new Date(link.updatedAt!).toLocaleString("ko-KR")}
+              className="font-mono text-[11px] uppercase tracking-[1px] text-body-mid/80"
+            >
+              UPDATED {formattedUpdatedAt}
             </p>
           )}
         </div>
