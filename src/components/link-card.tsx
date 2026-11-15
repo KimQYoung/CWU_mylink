@@ -27,6 +27,7 @@ interface LinkCardProps {
   mode?: "directory" | "public" | "mypage";
   theme?: ThemeId;
   copied?: boolean;
+  showClickCount?: boolean;
   isUpdating?: boolean;
   isDeleting?: boolean;
   existingLinks?: LinkItem[];
@@ -124,6 +125,7 @@ export function LinkCard({
   mode = "public",
   theme = "xai",
   copied = false,
+  showClickCount = false,
   isUpdating = false,
   isDeleting = false,
   existingLinks,
@@ -228,51 +230,55 @@ export function LinkCard({
           </div>
         </div>
 
-        <div className="flex items-center gap-2 shrink-0">
-          <LinkClickBadge
-            count={clickCount}
-            className="pointer-events-none px-2"
-          />
+        {(showClickCount || hasManagementActions) && (
+          <div className="flex items-center gap-2 shrink-0">
+            {showClickCount && (
+              <LinkClickBadge
+                count={clickCount}
+                className="pointer-events-none px-2"
+              />
+            )}
 
-          {hasManagementActions && (
-            <div
-              onClick={(e) => e.stopPropagation()}
-              className="relative z-10 flex items-center gap-1 shrink-0"
-            >
-              {onEditStart && (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon-sm"
-                  disabled={isBusy}
-                  onClick={() => onEditStart(link)}
-                  aria-label={`${link.title} 수정`}
-                  className="size-8 text-body-mid hover:text-ink"
-                >
-                  <Pencil className="size-3.5" strokeWidth={1.5} />
-                </Button>
-              )}
-              {onDeleteRequest && (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon-sm"
-                  disabled={isBusy}
-                  aria-busy={isDeleting}
-                  onClick={() => onDeleteRequest(link)}
-                  aria-label={`${link.title} 삭제`}
-                  className="size-8 text-body-mid hover:text-red-400 hover:bg-red-500/10"
-                >
-                  {isDeleting ? (
-                    <Loader2 className="size-3.5 animate-spin" strokeWidth={1.5} />
-                  ) : (
-                    <Trash2 className="size-3.5" strokeWidth={1.5} />
-                  )}
-                </Button>
-              )}
-            </div>
-          )}
-        </div>
+            {hasManagementActions && (
+              <div
+                onClick={(e) => e.stopPropagation()}
+                className="relative z-10 flex items-center gap-1 shrink-0"
+              >
+                {onEditStart && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon-sm"
+                    disabled={isBusy}
+                    onClick={() => onEditStart(link)}
+                    aria-label={`${link.title} 수정`}
+                    className="size-8 text-body-mid hover:text-ink"
+                  >
+                    <Pencil className="size-3.5" strokeWidth={1.5} />
+                  </Button>
+                )}
+                {onDeleteRequest && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon-sm"
+                    disabled={isBusy}
+                    aria-busy={isDeleting}
+                    onClick={() => onDeleteRequest(link)}
+                    aria-label={`${link.title} 삭제`}
+                    className="size-8 text-body-mid hover:text-red-400 hover:bg-red-500/10"
+                  >
+                    {isDeleting ? (
+                      <Loader2 className="size-3.5 animate-spin" strokeWidth={1.5} />
+                    ) : (
+                      <Trash2 className="size-3.5" strokeWidth={1.5} />
+                    )}
+                  </Button>
+                )}
+              </div>
+            )}
+          </div>
+        )}
       </Card>
     );
   }

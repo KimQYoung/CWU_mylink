@@ -218,6 +218,7 @@ export default function Home() {
                       index={index}
                       mode="mypage"
                       theme="xai"
+                      showClickCount
                       copied={copiedId === link.id}
                       isUpdating={updatingLinkIds.includes(link.id)}
                       isDeleting={deletingLinkId === link.id}
