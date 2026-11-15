@@ -1,6 +1,12 @@
 "use client";
 
-import { ArrowUpRight, Loader2, Pencil, Trash2 } from "lucide-react";
+import {
+  ArrowUpRight,
+  Loader2,
+  MousePointerClick,
+  Pencil,
+  Trash2,
+} from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -122,6 +128,7 @@ export function LinkCard({
   );
   const hasPrimaryAction = isCopyEmailAction || Boolean(link.url);
   const formattedUpdatedAt = formatLinkTimestamp(link.updatedAt);
+  const clickCount = (link.clicks ?? 0).toLocaleString();
   const themeStyles = PUBLIC_THEME_CARD[theme];
 
   if (isEditing && onSaveEdit) {
@@ -160,6 +167,11 @@ export function LinkCard({
         target="_blank"
         rel="noopener noreferrer"
         onClick={() => onLinkClick?.(link)}
+        onAuxClick={(e) => {
+          if (e.button === 1) {
+            onLinkClick?.(link);
+          }
+        }}
         aria-label={`${link.title} 새 탭에서 열기`}
         className={cn(
           "absolute inset-0 z-0 rounded-[inherit] focus-visible:outline-none",
@@ -261,6 +273,11 @@ export function LinkCard({
       target="_blank"
       rel="noopener noreferrer"
       onClick={() => onLinkClick?.(link)}
+      onAuxClick={(e) => {
+        if (e.button === 1) {
+          onLinkClick?.(link);
+        }
+      }}
       aria-label={`${link.title} 새 탭에서 열기`}
       className={cn(
         "inline-flex items-center justify-center transition-colors focus-visible:outline-none shrink-0",
@@ -304,8 +321,13 @@ export function LinkCard({
               <Badge variant={link.isActive ? "active" : "muted"}>
                 {link.isActive ? "ACTIVE" : "HIDDEN"}
               </Badge>
-              <Badge variant="default">
-                {(link.clicks ?? 0).toLocaleString()}
+              <Badge
+                variant="default"
+                aria-label={`클릭수 ${clickCount}회`}
+                title={`클릭수 ${clickCount}회`}
+              >
+                <MousePointerClick className="size-3 shrink-0" strokeWidth={1.5} />
+                <span>{clickCount}</span>
               </Badge>
             </div>
           )}
@@ -327,8 +349,13 @@ export function LinkCard({
                 <Badge variant={link.isActive ? "active" : "muted"}>
                   {link.isActive ? "ACTIVE" : "HIDDEN"}
                 </Badge>
-                <Badge variant="default">
-                  {(link.clicks ?? 0).toLocaleString()} CLICKS
+                <Badge
+                  variant="default"
+                  aria-label={`클릭수 ${clickCount}회`}
+                  title={`클릭수 ${clickCount}회`}
+                >
+                  <MousePointerClick className="size-3 shrink-0" strokeWidth={1.5} />
+                  <span>{clickCount}</span>
                 </Badge>
               </>
             )}

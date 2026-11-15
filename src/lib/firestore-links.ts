@@ -149,7 +149,7 @@ function mapDocToLinkItem(docSnap: QueryDocumentSnapshot<DocumentData>): LinkIte
     updatedAt,
     clicks:
       typeof data.clicks === "number" && Number.isFinite(data.clicks)
-        ? data.clicks
+        ? Math.max(0, Math.floor(data.clicks))
         : 0,
     ...(typeof data.url === "string" ? { url: data.url } : {}),
     ...(typeof data.displayUrl === "string"
@@ -283,6 +283,7 @@ export async function updateUserLinkActive(
 
 /**
  * Firestore에 저장된 링크의 클릭 수를 원자적으로 1 증가시킵니다.
+ * 수정 시각(updatedAt)은 링크 편집 이력을 유지하기 위해 변경하지 않습니다.
  */
 export async function incrementUserLinkClicks(
   uid: string,
@@ -291,7 +292,6 @@ export async function incrementUserLinkClicks(
   const db = requireFirestoreDb();
   await updateDoc(getLinkDocRef(db, uid, linkId), {
     clicks: increment(1),
-    updatedAt: serverTimestamp(),
   });
 }
 

@@ -480,23 +480,39 @@ interface RecordLinkClickInput {
   targetUid?: string | null;
 }
 
+interface RecordLinkClickContext {
+  uid: string | null;
+  linkId: string;
+  hasTarget: boolean;
+  isOwnUser: boolean;
+}
+
 /**
  * 링크 클릭 시 캐시 카운터를 즉시 증가시키고 Firestore 클릭 수를 원자적으로 +1 합니다.
+ * 저장 실패 시 증가시켰던 클릭 수 캐시를 롤백합니다.
  */
 export function useRecordLinkClickMutation() {
   const queryClient = useQueryClient();
 
-  return useMutation({
-    onMutate: ({ linkId, targetUid }: RecordLinkClickInput) => {
+  return useMutation<void, unknown, RecordLinkClickInput, RecordLinkClickContext>({
+    onMutate: ({ linkId, targetUid }) => {
       const uid =
         targetUid?.trim() || useProfileStore.getState().authUser?.uid || null;
-      if (!uid) return { uid: null, hasTarget: false, isOwnUser: false };
+      if (!uid) {
+        return { uid: null, linkId, hasTarget: false, isOwnUser: false };
+      }
 
       const isOwnUser = uid === useProfileStore.getState().authUser?.uid;
+      if (isOwnUser) {
+        useProfileStore.getState().setFirestoreMutationError(null);
+      }
+
       const cachedLinks =
         queryClient.getQueryData<LinkItem[]>(userQueryKeys.links(uid)) ?? [];
       const hasTarget = cachedLinks.some((link) => link.id === linkId);
-      if (!hasTarget) return { uid, hasTarget: false, isOwnUser };
+      if (!hasTarget) {
+        return { uid, linkId, hasTarget: false, isOwnUser };
+      }
 
       queryClient.setQueryData<LinkItem[]>(
         userQueryKeys.links(uid),
@@ -513,18 +529,29 @@ export function useRecordLinkClickMutation() {
         useProfileStore.getState().recordClickAnalytics();
       }
 
-      return { uid, hasTarget: true, isOwnUser };
+      return { uid, linkId, hasTarget: true, isOwnUser };
     },
-    mutationFn: async ({ linkId, targetUid }: RecordLinkClickInput) => {
+    mutationFn: async ({ linkId, targetUid }) => {
       const uid =
         targetUid?.trim() || useProfileStore.getState().authUser?.uid || null;
-      if (!uid) return;
-      const cachedLinks =
-        queryClient.getQueryData<LinkItem[]>(userQueryKeys.links(uid)) ?? [];
-      if (!cachedLinks.some((link) => link.id === linkId)) return;
+      if (!uid || !linkId) return;
       await incrementUserLinkClicks(uid, linkId);
     },
-    onError: (error, _variables, context) => {
+    onError: (error, variables, context) => {
+      if (context?.uid && context.hasTarget) {
+        queryClient.setQueryData<LinkItem[]>(
+          userQueryKeys.links(context.uid),
+          (current = []) =>
+            sortLinksByCreatedAtDesc(
+              current.map((link) =>
+                link.id === variables.linkId
+                  ? { ...link, clicks: Math.max(0, (link.clicks ?? 0) - 1) }
+                  : link
+              )
+            )
+        );
+      }
+
       if (!context?.isOwnUser) {
         return;
       }

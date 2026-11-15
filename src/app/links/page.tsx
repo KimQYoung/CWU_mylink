@@ -140,7 +140,7 @@ export default function LinksPage() {
 
   const handleCopyEmail = (link: LinkItem) => {
     if (!profile.email) return;
-    navigator.clipboard.writeText(profile.email);
+    void navigator.clipboard?.writeText(profile.email);
     recordLinkClick(link.id);
     setCopiedLinkId(link.id);
     showToast(`ADDRESS COPIED: ${profile.email}`);

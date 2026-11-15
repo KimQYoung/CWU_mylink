@@ -1,0 +1,58 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 로그인 여부 확인
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    // 요청 사용자가 해당 문서의 소유자인지 확인
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    // 비로그인 방문자를 포함해 누구나 링크 클릭수(clicks)만 +1 증가시키는 업데이트인지 검증
+    function isValidClickIncrement() {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(['clicks'])
+        && request.resource.data.clicks is number
+        && (
+          (
+            (!('clicks' in resource.data) || resource.data.clicks == null)
+            && request.resource.data.clicks == 1
+          )
+          || (
+            'clicks' in resource.data
+            && resource.data.clicks is number
+            && request.resource.data.clicks == resource.data.clicks + 1
+          )
+        );
+    }
+
+    // 사용자 프로필 문서: 공개 조회 허용, 쓰기는 본인만 가능
+    match /users/{userId} {
+      allow read: if true;
+      allow create, update, delete: if isOwner(userId);
+
+      // 사용자 링크 하위 컬렉션:
+      // - 조회는 공개 프로필(/[displayName]) 렌더링을 위해 허용
+      // - 생성/삭제는 본인만 가능
+      // - 수정은 본인의 전체 수정 또는 누구나 가능한 클릭 카운트(+1) 증가만 허용
+      match /links/{linkId} {
+        allow read: if true;
+        allow create, delete: if isOwner(userId);
+        allow update: if isOwner(userId) || isValidClickIncrement();
+      }
+    }
+
+    // Display Name 중복 확인 및 공개 URL 매핑 인덱스 컬렉션
+    match /displayNames/{docId} {
+      allow read: if true;
+      allow create: if isSignedIn() && request.resource.data.uid == request.auth.uid;
+      allow update: if isSignedIn()
+        && resource.data.uid == request.auth.uid
+        && request.resource.data.uid == request.auth.uid;
+      allow delete: if isSignedIn() && resource.data.uid == request.auth.uid;
+    }
+  }
+}

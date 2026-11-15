@@ -195,7 +195,7 @@ export function PublicProfileClient({
 
   const handleCopyEmail = (link: LinkItem) => {
     if (!contactEmail || !targetUserId) return;
-    navigator.clipboard.writeText(contactEmail);
+    void navigator.clipboard?.writeText(contactEmail);
     recordLinkClick(link.id, targetUserId);
     setCopiedId(link.id);
     showToast(`ADDRESS COPIED: ${contactEmail}`);

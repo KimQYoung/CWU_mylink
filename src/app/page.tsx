@@ -84,7 +84,7 @@ export default function Home() {
 
   const handleCopyEmail = (link: LinkItem) => {
     if (!profile.email) return;
-    navigator.clipboard.writeText(profile.email);
+    void navigator.clipboard?.writeText(profile.email);
     recordLinkClick(link.id);
     setCopiedId(link.id);
     showToast(`ADDRESS COPIED: ${profile.email}`);
