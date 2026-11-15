@@ -125,7 +125,10 @@ export function AddLinkDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogPopup className="max-w-lg p-5 sm:p-6">
+      <DialogPopup
+        className="max-w-lg p-5 sm:p-6"
+        showCloseButton={!isSubmitting}
+      >
         <DialogHeader>
           <div className="flex items-center gap-2 pb-1">
             <span className="font-mono text-[11px] uppercase tracking-[1.4px] text-body-mid">
@@ -177,18 +180,19 @@ export function AddLinkDialog({
             >
               취소
             </Button>
-            <Button type="submit" variant="default" disabled={isSubmitting}>
+            <Button
+              type="submit"
+              variant="default"
+              disabled={isSubmitting}
+              aria-busy={isSubmitting}
+              className={isSubmitting ? "disabled:opacity-80" : undefined}
+            >
               {isSubmitting ? (
-                <>
-                  <Loader2 className="size-4 animate-spin" strokeWidth={1.5} />
-                  <span>저장 중...</span>
-                </>
+                <Loader2 className="size-4 animate-spin" strokeWidth={1.5} />
               ) : (
-                <>
-                  <Plus className="size-4" strokeWidth={1.5} />
-                  <span>링크 추가</span>
-                </>
+                <Plus className="size-4" strokeWidth={1.5} />
               )}
+              <span>링크 추가</span>
             </Button>
           </DialogFooter>
         </form>
