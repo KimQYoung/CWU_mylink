@@ -92,6 +92,28 @@ const PUBLIC_THEME_CARD: Record<
   },
 };
 
+interface LinkClickBadgeProps {
+  count: string;
+  className?: string;
+}
+
+/**
+ * 링크 클릭 수 배지
+ */
+function LinkClickBadge({ count, className }: LinkClickBadgeProps) {
+  return (
+    <Badge
+      variant="default"
+      aria-label={`클릭수 ${count}회`}
+      title={`클릭수 ${count}회`}
+      className={cn("tabular-nums", className)}
+    >
+      <MousePointerClick className="size-3 shrink-0" strokeWidth={1.5} />
+      <span>{count}</span>
+    </Badge>
+  );
+}
+
 /**
  * shadcn/ui Card / Button / Badge / Switch 기반의 재사용 가능한 링크 카드 컴포넌트
  * - 카드 블록 전체를 클릭하면 링크를 실행(새 탭 열기 또는 이메일 복사)하며, 관리 버튼은 독립적으로 동작합니다.
@@ -206,44 +228,51 @@ export function LinkCard({
           </div>
         </div>
 
-        {hasManagementActions && (
-          <div
-            onClick={(e) => e.stopPropagation()}
-            className="relative z-10 flex items-center gap-1 shrink-0"
-          >
-            {onEditStart && (
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon-sm"
-                disabled={isBusy}
-                onClick={() => onEditStart(link)}
-                aria-label={`${link.title} 수정`}
-                className="size-8 text-body-mid hover:text-ink"
-              >
-                <Pencil className="size-3.5" strokeWidth={1.5} />
-              </Button>
-            )}
-            {onDeleteRequest && (
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon-sm"
-                disabled={isBusy}
-                aria-busy={isDeleting}
-                onClick={() => onDeleteRequest(link)}
-                aria-label={`${link.title} 삭제`}
-                className="size-8 text-body-mid hover:text-red-400 hover:bg-red-500/10"
-              >
-                {isDeleting ? (
-                  <Loader2 className="size-3.5 animate-spin" strokeWidth={1.5} />
-                ) : (
-                  <Trash2 className="size-3.5" strokeWidth={1.5} />
-                )}
-              </Button>
-            )}
-          </div>
-        )}
+        <div className="flex items-center gap-2 shrink-0">
+          <LinkClickBadge
+            count={clickCount}
+            className="pointer-events-none px-2"
+          />
+
+          {hasManagementActions && (
+            <div
+              onClick={(e) => e.stopPropagation()}
+              className="relative z-10 flex items-center gap-1 shrink-0"
+            >
+              {onEditStart && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-sm"
+                  disabled={isBusy}
+                  onClick={() => onEditStart(link)}
+                  aria-label={`${link.title} 수정`}
+                  className="size-8 text-body-mid hover:text-ink"
+                >
+                  <Pencil className="size-3.5" strokeWidth={1.5} />
+                </Button>
+              )}
+              {onDeleteRequest && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-sm"
+                  disabled={isBusy}
+                  aria-busy={isDeleting}
+                  onClick={() => onDeleteRequest(link)}
+                  aria-label={`${link.title} 삭제`}
+                  className="size-8 text-body-mid hover:text-red-400 hover:bg-red-500/10"
+                >
+                  {isDeleting ? (
+                    <Loader2 className="size-3.5 animate-spin" strokeWidth={1.5} />
+                  ) : (
+                    <Trash2 className="size-3.5" strokeWidth={1.5} />
+                  )}
+                </Button>
+              )}
+            </div>
+          )}
+        </div>
       </Card>
     );
   }
@@ -321,14 +350,7 @@ export function LinkCard({
               <Badge variant={link.isActive ? "active" : "muted"}>
                 {link.isActive ? "ACTIVE" : "HIDDEN"}
               </Badge>
-              <Badge
-                variant="default"
-                aria-label={`클릭수 ${clickCount}회`}
-                title={`클릭수 ${clickCount}회`}
-              >
-                <MousePointerClick className="size-3 shrink-0" strokeWidth={1.5} />
-                <span>{clickCount}</span>
-              </Badge>
+              <LinkClickBadge count={clickCount} />
             </div>
           )}
         </div>
@@ -349,14 +371,7 @@ export function LinkCard({
                 <Badge variant={link.isActive ? "active" : "muted"}>
                   {link.isActive ? "ACTIVE" : "HIDDEN"}
                 </Badge>
-                <Badge
-                  variant="default"
-                  aria-label={`클릭수 ${clickCount}회`}
-                  title={`클릭수 ${clickCount}회`}
-                >
-                  <MousePointerClick className="size-3 shrink-0" strokeWidth={1.5} />
-                  <span>{clickCount}</span>
-                </Badge>
+                <LinkClickBadge count={clickCount} />
               </>
             )}
           </div>
