@@ -3,11 +3,15 @@
 import { useMemo, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { ArrowRight } from "lucide-react";
+import { ArrowRight, Plus } from "lucide-react";
+import {
+  AddLinkDialog,
+  type AddedLinkSummary,
+} from "@/components/add-link-dialog";
 import { LinkCard } from "@/components/link-card";
 import { SiteHeader } from "@/components/site-header";
 import { StatusToast } from "@/components/status-toast";
-import { buttonVariants } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { DEFAULT_PROFILE, useProfileStore } from "../lib/store";
@@ -19,23 +23,37 @@ export default function Home() {
   const hasMounted = useHydrated();
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
 
   const storeProfile = useProfileStore((state) => state.profile);
   const recordLinkClick = useProfileStore((state) => state.recordLinkClick);
 
   const profile = hasMounted ? storeProfile : DEFAULT_PROFILE;
 
+  const showToast = (message: string) => {
+    setToastMessage(message);
+    window.setTimeout(() => {
+      setToastMessage((current) => (current === message ? null : current));
+    }, 2400);
+  };
+
   const handleCopyEmail = (link: LinkItem) => {
     if (!profile.email) return;
     navigator.clipboard.writeText(profile.email);
     recordLinkClick(link.id);
     setCopiedId(link.id);
-    const message = `ADDRESS COPIED: ${profile.email}`;
-    setToastMessage(message);
+    showToast(`ADDRESS COPIED: ${profile.email}`);
     window.setTimeout(() => {
       setCopiedId((current) => (current === link.id ? null : current));
-      setToastMessage((current) => (current === message ? null : current));
     }, 2400);
+  };
+
+  const handleLinkAdded = (created: AddedLinkSummary) => {
+    showToast(
+      created.isActive
+        ? `${created.endpointLabel} ADDED: ${created.title}`
+        : `${created.endpointLabel} SAVED AS HIDDEN`
+    );
   };
 
   const activeLinks = useMemo(
@@ -126,7 +144,7 @@ export default function Home() {
           </div>
         </section>
 
-        {/* DIRECTORY & ACCESS (LINK CARDS FROM LOCALSTORAGE) */}
+        {/* DIRECTORY & ACCESS (LINK CARDS FROM MEMORY STATE) */}
         <section className="space-y-6">
           <Separator />
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -139,16 +157,28 @@ export default function Home() {
               </span>
             </div>
 
-            <Link
-              href="/links"
-              className={cn(
-                buttonVariants({ variant: "outline", size: "sm" }),
-                "w-full sm:w-auto font-mono text-[11px] uppercase tracking-[1.2px]"
-              )}
-            >
-              <span>All Links ({profile.links.length})</span>
-              <ArrowRight className="size-3.5" strokeWidth={1.5} />
-            </Link>
+            <div className="grid grid-cols-1 min-[380px]:grid-cols-2 sm:flex items-center gap-2 w-full sm:w-auto">
+              <Button
+                type="button"
+                variant="default"
+                size="sm"
+                onClick={() => setIsAddDialogOpen(true)}
+                className="w-full sm:w-auto font-mono text-[11px] uppercase tracking-[1.2px]"
+              >
+                <Plus className="size-3.5" strokeWidth={1.5} />
+                <span>링크 추가</span>
+              </Button>
+              <Link
+                href="/links"
+                className={cn(
+                  buttonVariants({ variant: "outline", size: "sm" }),
+                  "w-full sm:w-auto font-mono text-[11px] uppercase tracking-[1.2px]"
+                )}
+              >
+                <span>All Links ({profile.links.length})</span>
+                <ArrowRight className="size-3.5" strokeWidth={1.5} />
+              </Link>
+            </div>
           </div>
 
           <div className="space-y-3">
@@ -208,7 +238,7 @@ export default function Home() {
             </p>
             <p className="text-xs text-body-mid">
               Engineered with restraint • Strict Dark Canvas • xAI Design System •
-              LocalStorage Driven
+              In-Memory State Driven
             </p>
           </div>
 
@@ -217,6 +247,12 @@ export default function Home() {
           </div>
         </div>
       </footer>
+
+      <AddLinkDialog
+        open={isAddDialogOpen}
+        onOpenChange={setIsAddDialogOpen}
+        onAdded={handleLinkAdded}
+      />
 
       <StatusToast message={toastMessage} theme="xai" />
     </div>

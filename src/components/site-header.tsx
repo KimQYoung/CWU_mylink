@@ -83,7 +83,7 @@ export function SiteHeader({
             <>
               <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
               <span className="font-mono text-[11px] uppercase tracking-[1.4px] text-body-mid">
-                LOCALSTORAGE ACTIVE
+                IN-MEMORY STATE
               </span>
             </>
           )}

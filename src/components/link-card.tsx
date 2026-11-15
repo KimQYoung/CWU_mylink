@@ -157,7 +157,11 @@ export function LinkCard({
           )}
 
           <h3 className={themeStyles.title}>{link.title}</h3>
-          <p className={cn(themeStyles.desc, "max-w-2xl")}>{link.description}</p>
+          {link.description && (
+            <p className={cn(themeStyles.desc, "max-w-2xl")}>
+              {link.description}
+            </p>
+          )}
         </div>
       </div>
 

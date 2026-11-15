@@ -5,10 +5,15 @@ import Link from "next/link";
 import {
   ArrowUpDown,
   ArrowUpRight,
+  Plus,
   RotateCcw,
   Search,
   Share2,
 } from "lucide-react";
+import {
+  AddLinkDialog,
+  type AddedLinkSummary,
+} from "@/components/add-link-dialog";
 import { LinkCard } from "@/components/link-card";
 import { SiteHeader } from "@/components/site-header";
 import { StatusToast } from "@/components/status-toast";
@@ -36,6 +41,7 @@ export default function LinksPage() {
   const [sortMode, setSortMode] = useState<SortMode>("order");
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [copiedLinkId, setCopiedLinkId] = useState<string | null>(null);
+  const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
 
   const profile = hasMounted ? storeProfile : DEFAULT_PROFILE;
 
@@ -129,6 +135,17 @@ export default function LinksPage() {
     setSortMode("order");
   };
 
+  const handleLinkAdded = (created: AddedLinkSummary) => {
+    setSearchQuery("");
+    if (
+      (statusFilter === "hidden" && created.isActive) ||
+      (statusFilter === "active" && !created.isActive)
+    ) {
+      setStatusFilter("all");
+    }
+    showToast(`${created.endpointLabel} ADDED: ${created.title}`);
+  };
+
   return (
     <div className="min-h-screen w-full bg-canvas text-ink font-sans selection:bg-white/20 selection:text-white flex flex-col">
       <SiteHeader
@@ -167,13 +184,23 @@ export default function LinksPage() {
               </Link>
               <Button
                 type="button"
-                variant="default"
+                variant="outline"
                 size="default"
                 onClick={handleCopyPublicUrl}
                 className="w-full sm:w-auto"
               >
                 <Share2 className="size-4" strokeWidth={1.5} />
                 <span>Copy Public URL</span>
+              </Button>
+              <Button
+                type="button"
+                variant="default"
+                size="default"
+                onClick={() => setIsAddDialogOpen(true)}
+                className="min-[380px]:col-span-2 sm:col-span-1 w-full sm:w-auto"
+              >
+                <Plus className="size-4" strokeWidth={1.5} />
+                <span>링크 추가</span>
               </Button>
             </div>
           </div>
@@ -326,10 +353,11 @@ export default function LinksPage() {
         <section className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
           <div className="space-y-1">
             <p className="font-mono text-xs uppercase tracking-[1.4px] text-body-mid">
-              {"// LOCALSTORAGE PERSISTENCE"}
+              {"// IN-MEMORY LOCAL STATE"}
             </p>
             <p className="text-sm font-normal text-body-mid">
-              변경된 공개 상태와 클릭 카운터는 브라우저 LocalStorage에 즉시 저장됩니다.
+              추가한 링크와 공개 상태, 클릭 카운터는 현재 메모리 상태에서 즉시
+              반영되며 새로고침 시 기본 더미 데이터로 초기화됩니다.
             </p>
           </div>
           <Button
@@ -358,6 +386,12 @@ export default function LinksPage() {
           </p>
         </div>
       </footer>
+
+      <AddLinkDialog
+        open={isAddDialogOpen}
+        onOpenChange={setIsAddDialogOpen}
+        onAdded={handleLinkAdded}
+      />
 
       <StatusToast message={toastMessage} theme="xai" />
     </div>

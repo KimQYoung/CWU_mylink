@@ -1,5 +1,4 @@
 import { create } from "zustand";
-import { persist, createJSONStorage } from "zustand/middleware";
 import {
   AnalyticsSummary,
   LinkItem,
@@ -9,15 +8,6 @@ import {
 import { DUMMY_ANALYTICS, DUMMY_LINKS } from "./dummy-links";
 
 export { DUMMY_ANALYTICS, DUMMY_LINKS };
-
-const LEGACY_DEFAULT_LINK_IDS = ["link-github", "link-project", "link-contact"];
-
-function isLegacyDefaultLinks(links: LinkItem[] | undefined): boolean {
-  if (!Array.isArray(links) || links.length !== LEGACY_DEFAULT_LINK_IDS.length) {
-    return false;
-  }
-  return links.every((link, index) => link.id === LEGACY_DEFAULT_LINK_IDS[index]);
-}
 
 function getTodayDateString(): string {
   return new Date().toISOString().slice(0, 10);
@@ -118,10 +108,8 @@ interface ProfileStore {
   resetToDefault: () => void;
 }
 
-export const useProfileStore = create<ProfileStore>()(
-  persist(
-    (set) => ({
-      profile: DEFAULT_PROFILE,
+export const useProfileStore = create<ProfileStore>()((set) => ({
+  profile: DEFAULT_PROFILE,
 
       setProfile: (newProfile) => set({ profile: newProfile }),
 
@@ -147,8 +135,12 @@ export const useProfileStore = create<ProfileStore>()(
 
       addLink: (newLink) =>
         set((state) => {
-          const nextOrder = state.profile.links.length + 1;
-          const id = `link-${Date.now()}`;
+          const nextOrder =
+            state.profile.links.reduce(
+              (max, item) => Math.max(max, item.order),
+              0
+            ) + 1;
+          const id = `link-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
           return {
             profile: {
               ...state.profile,
@@ -260,45 +252,4 @@ export const useProfileStore = create<ProfileStore>()(
         })),
 
       resetToDefault: () => set({ profile: DEFAULT_PROFILE }),
-    }),
-    {
-      name: "mylink_profile_storage", // LocalStorage 키 이름
-      version: 2,
-      storage: createJSONStorage(() => localStorage),
-      migrate: (persistedState: unknown, version: number): ProfileStore => {
-        const persisted = persistedState as
-          | Partial<ProfileStore>
-          | null
-          | undefined;
-        if (!persisted?.profile) {
-          return { profile: DEFAULT_PROFILE } as ProfileStore;
-        }
-
-        if (version < 2) {
-          const existingProfile = persisted.profile;
-          const useNewDummyLinks =
-            !Array.isArray(existingProfile.links) ||
-            existingProfile.links.length === 0 ||
-            isLegacyDefaultLinks(existingProfile.links);
-
-          return {
-            ...persisted,
-            profile: {
-              ...DEFAULT_PROFILE,
-              ...existingProfile,
-              links: useNewDummyLinks
-                ? DUMMY_LINKS
-                : existingProfile.links.map((link) => ({
-                    ...link,
-                    clicks: link.clicks ?? 0,
-                  })),
-              analytics: existingProfile.analytics ?? DUMMY_ANALYTICS,
-            },
-          } as ProfileStore;
-        }
-
-        return persisted as ProfileStore;
-      },
-    }
-  )
-);
+}));

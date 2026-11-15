@@ -162,7 +162,7 @@ export default function PublicProfilePage() {
             @{decodedUsername} 프로필을 찾을 수 없습니다
           </h1>
           <p className="text-sm text-body-mid leading-relaxed">
-            현재 LocalStorage에 등록된 프로필은{" "}
+            현재 로컬 메모리 상태에 등록된 프로필은{" "}
             <span className="font-mono text-ink">@{profile.username}</span>입니다.
           </p>
           <div className="flex flex-col sm:flex-row items-center justify-center gap-2.5 pt-2">
