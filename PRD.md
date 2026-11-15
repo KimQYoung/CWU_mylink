@@ -89,13 +89,14 @@
 
 ### 3.1 사이트맵 (Sitemap)
 ```text
-/ (루트)                 # 서비스 소개 랜딩 페이지 및 데모 체험 진입
+/ (루트)                 # 메인 프로필 개요 및 핵심 링크 목록 페이지
+├── /links (링크 목록)    # 전체 링크(활성/숨김 포함) 검색·필터·정렬·토글 전용 디렉토리 페이지
 ├── /admin (대시보드)     # 링크트리형 관리자 2-패널 빌더
 │   ├── [탭] 프로필 설정  # 이름, 바이오, 핸들명, 아바타 수정
 │   ├── [탭] 링크 관리   # 링크 CRUD, 순서 변경, 온/오프 토글
 │   ├── [탭] 테마 선택   # xAI / Neobrutalism / Modern 프리셋 스위처
 │   └── [탭] 통계 분석   # 조회수, 클릭수, CTR, 7일 추이 차트, 링크별 랭킹
-└── /[username] (공개)   # 방문자용 최종 반응형 공개 프로필 링크 페이지 (예: /kimqyoung)
+└── /[username] (공개)   # 방문자용 최종 반응형 공개 프로필 링크 페이지 (예: /KimQYoung)
 ```
 
 ### 3.2 핵심 유저 플로우 (User Journey)
@@ -176,8 +177,10 @@ flowchart TD
 | FR-7.1 | **CSS 변수 & 테마 토큰** | • Tailwind CSS v4 `@theme inline` (`src/app/globals.css`) 기반 Config-less 토큰 관리<br>• `--background: #0a0a0a`, `--card: #191919`, `--border: #212327`, `--primary: #ffffff`, `--primary-foreground: #0a0a0a` 매핑<br>• `--radius: 8px` (`rounded-sm`/`rounded-lg` 카드 규격), 버튼은 `9999px` (`rounded-full`) 고정 | P0 |
 | FR-7.2 | **Button (`ui/button`)** | • `variant="outline"` (기본 CTA): 투명 배경(`#0a0a0a`), `1px solid rgba(255,255,255,0.25)` 보더, `rounded-full` (9999px Pill)<br>• `variant="default"` (핵심 Sign Up / Copy CTA): `#ffffff` 배경, `#0a0a0a` 텍스트, `rounded-full` (9999px Pill)<br>• Bold 금지 (`font-normal`, Weight 400 유지) | P0 |
 | FR-7.3 | **Card (`ui/card`)** | • 배경 `#191919` (`canvas-card`), `1px solid #212327` (`hairline`) 보더<br>• `8px` 모서리 라운드, **그림자 완전 제거 (`shadow-none`)** — 헤어라인 보더만으로 깊이감 표현 | P0 |
-| FR-7.4 | **Input / Textarea / Tabs (`ui/*`)** | • 배경 `#1a1c20` (`canvas-soft`), `1px solid #212327` 보더, `8px` 라운드<br>• 포커스 시 과도한 글로우 대신 화이트/헤어라인 톤의 절제된 링 적용 | P0 |
+| FR-7.4 | **Input / Switch / Separator (`ui/*`)** | • `Input`: 배경 `#1a1c20` (`canvas-soft`), `1px solid #212327` 보더, `8px` 라운드, 절제된 포커스 링<br>• `Switch` (`@base-ui/react/switch`): 링크 활성화/숨김 제어용 9999px 필 토글<br>• `Separator` (`@base-ui/react/separator`): `1px` `#212327` 헤어라인 섹션 구분선 | P0 |
 | FR-7.5 | **Typography & Iconography** | • 디스플레이/본문 전체 **Weight 400** 고정, 디스플레이 음수 자간(`-0.035em` ~ `-0.02em`)<br>• 섹션 아이브로우·지표 라벨은 `Geist Mono` 대문자 + `+1.4px` 자간<br>• 아이콘은 `lucide-react` 1.5px 스트로크 기반 모노크롬 스타일 사용 | P0 |
+| FR-7.6 | **스타일링 통일 (Tailwind CSS Only)** | • **CSS Modules(`*.module.css`) 및 인라인 `style` 속성 사용 금지**: 모든 페이지와 UI 컴포넌트의 스타일은 **Tailwind CSS v4 유틸리티 클래스**와 `src/app/globals.css`의 `@theme inline` 토큰으로만 통일하여 작성<br>• Neobrutalism 모눈종이 배경 패턴 등 테마별 시각 효과 역시 Tailwind 임의 유틸리티(`bg-[linear-gradient(...)]`)로 구현 | P0 |
+| FR-7.7 | **재사용 컴포넌트 아키텍처** | • `src/components/ui/*` (`Button`, `Card`, `Input`, `Badge`, `Switch`, `Separator`) 프리미티브 위에 도메인 재사용 컴포넌트를 합성하여 페이지 간 UI 중복 제거<br>• 공용 컴포넌트: `LinkCard`(`/`·`/links`·`/[username]` 공용 링크 카드), `StatusToast`(복사/상태 알림 토스트), `SiteHeader`(상단 고정 내비게이션), `LinkIcon`(아이콘 매퍼) | P0 |
 
 ---
 
@@ -186,8 +189,8 @@ flowchart TD
 ### 5.1 기술 스택
 - **Framework**: Next.js 16 (App Router)
 - **Language**: TypeScript 5
-- **Styling**: **Tailwind CSS v4** (`@tailwindcss/postcss`, 별도 `tailwind.config` 파일 없는 CSS-first `@theme inline` 아키텍처)
-- **UI Design System**: **shadcn/ui** (`@base-ui/react`, `class-variance-authority`, `tw-animate-css`, `cn`) — [`DESIGN.md`](./DESIGN.md)의 xAI 디자인 시스템 규격(단일 `#0a0a0a` 캔버스, Weight 400, Pill 버튼, Hairline 카드)으로 테마 토큰 및 컴포넌트 변형(Variants) 커스터마이징
+- **Styling**: **Tailwind CSS v4 Only** (`@tailwindcss/postcss`, 별도 `tailwind.config` 및 `*.module.css` 없이 CSS-first `@theme inline` + 유틸리티 클래스로 전체 스타일링 통일)
+- **UI Design System**: **shadcn/ui** (`@base-ui/react`, `class-variance-authority`, `tw-animate-css`, `cn`) — [`DESIGN.md`](./DESIGN.md)의 xAI 디자인 시스템 규격(단일 `#0a0a0a` 캔버스, Weight 400, Pill 버튼, Hairline 카드)으로 테마 토큰, 프리미티브(`ui/*`), 재사용 도메인 컴포넌트(`LinkCard`, `StatusToast` 등) 구축
 - **State Management**: **Zustand v5** (초경량 반응형 상태 관리, `persist` 미들웨어 기반 `localStorage` 자동 영속화 및 2-패널 선택자 최적화)
 - **Icons**: **Lucide React** (`lucide-react`) / Custom SVG Icons
 - **Data Visualization**: Pure Tailwind CSS + SVG Charts (별도 무거운 차트 패키지 없이 0ms 로딩)

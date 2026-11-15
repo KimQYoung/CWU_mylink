@@ -1,6 +1,11 @@
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
-import { UserProfile, LinkItem } from "../types";
+import {
+  AnalyticsSummary,
+  LinkItem,
+  ThemeId,
+  UserProfile,
+} from "../types";
 import { DUMMY_ANALYTICS, DUMMY_LINKS } from "./dummy-links";
 
 export { DUMMY_ANALYTICS, DUMMY_LINKS };
@@ -12,6 +17,45 @@ function isLegacyDefaultLinks(links: LinkItem[] | undefined): boolean {
     return false;
   }
   return links.every((link, index) => link.id === LEGACY_DEFAULT_LINK_IDS[index]);
+}
+
+function getTodayDateString(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function updateDailyHistory(
+  analytics: AnalyticsSummary | undefined,
+  deltaViews: number,
+  deltaClicks: number
+): AnalyticsSummary {
+  const base = analytics ?? DUMMY_ANALYTICS;
+  const today = getTodayDateString();
+  const history = [...(base.dailyHistory ?? [])];
+  const existingIdx = history.findIndex((entry) => entry.date === today);
+
+  if (existingIdx >= 0) {
+    const current = history[existingIdx];
+    history[existingIdx] = {
+      ...current,
+      views: current.views + deltaViews,
+      clicks: current.clicks + deltaClicks,
+    };
+  } else {
+    history.push({
+      date: today,
+      views: deltaViews,
+      clicks: deltaClicks,
+    });
+  }
+
+  // Keep up to the most recent 14 days
+  const trimmedHistory = history.slice(-14);
+
+  return {
+    totalViews: (base.totalViews ?? 0) + deltaViews,
+    totalClicks: (base.totalClicks ?? 0) + deltaClicks,
+    dailyHistory: trimmedHistory,
+  };
 }
 
 export const DEFAULT_PROFILE: UserProfile = {
@@ -56,13 +100,21 @@ export const DEFAULT_PROFILE: UserProfile = {
 
 interface ProfileStore {
   profile: UserProfile;
-  // 액션
+  // 프로필 & 테마 액션
   setProfile: (profile: UserProfile) => void;
   updateProfile: (partial: Partial<UserProfile>) => void;
+  setTheme: (theme: ThemeId) => void;
+  // 링크 CRUD 및 정렬 액션
   updateLink: (id: string, partial: Partial<LinkItem>) => void;
   addLink: (link: Omit<LinkItem, "id" | "order">) => void;
   deleteLink: (id: string) => void;
   toggleLink: (id: string) => void;
+  toggleLinkActive: (id: string) => void;
+  reorderLinks: (sourceIndex: number, destinationIndex: number) => void;
+  // 애널리틱스 트래킹 액션
+  recordPageView: () => void;
+  recordLinkClick: (linkId: string) => void;
+  resetAnalytics: () => void;
   resetToDefault: () => void;
 }
 
@@ -76,6 +128,11 @@ export const useProfileStore = create<ProfileStore>()(
       updateProfile: (partial) =>
         set((state) => ({
           profile: { ...state.profile, ...partial },
+        })),
+
+      setTheme: (theme) =>
+        set((state) => ({
+          profile: { ...state.profile, theme },
         })),
 
       updateLink: (id, partial) =>
@@ -112,7 +169,9 @@ export const useProfileStore = create<ProfileStore>()(
         set((state) => ({
           profile: {
             ...state.profile,
-            links: state.profile.links.filter((link) => link.id !== id),
+            links: state.profile.links
+              .filter((link) => link.id !== id)
+              .map((link, index) => ({ ...link, order: index + 1 })),
           },
         })),
 
@@ -126,6 +185,80 @@ export const useProfileStore = create<ProfileStore>()(
           },
         })),
 
+      toggleLinkActive: (id) =>
+        set((state) => ({
+          profile: {
+            ...state.profile,
+            links: state.profile.links.map((link) =>
+              link.id === id ? { ...link, isActive: !link.isActive } : link
+            ),
+          },
+        })),
+
+      reorderLinks: (sourceIndex, destinationIndex) =>
+        set((state) => {
+          const ordered = [...state.profile.links].sort(
+            (a, b) => a.order - b.order
+          );
+          if (
+            sourceIndex < 0 ||
+            destinationIndex < 0 ||
+            sourceIndex >= ordered.length ||
+            destinationIndex >= ordered.length ||
+            sourceIndex === destinationIndex
+          ) {
+            return state;
+          }
+          const [moved] = ordered.splice(sourceIndex, 1);
+          ordered.splice(destinationIndex, 0, moved);
+          const reindexed = ordered.map((link, index) => ({
+            ...link,
+            order: index + 1,
+          }));
+          return {
+            profile: {
+              ...state.profile,
+              links: reindexed,
+            },
+          };
+        }),
+
+      recordPageView: () =>
+        set((state) => ({
+          profile: {
+            ...state.profile,
+            analytics: updateDailyHistory(state.profile.analytics, 1, 0),
+          },
+        })),
+
+      recordLinkClick: (linkId) =>
+        set((state) => ({
+          profile: {
+            ...state.profile,
+            links: state.profile.links.map((link) =>
+              link.id === linkId
+                ? { ...link, clicks: (link.clicks ?? 0) + 1 }
+                : link
+            ),
+            analytics: updateDailyHistory(state.profile.analytics, 0, 1),
+          },
+        })),
+
+      resetAnalytics: () =>
+        set((state) => ({
+          profile: {
+            ...state.profile,
+            links: state.profile.links.map((link) => ({ ...link, clicks: 0 })),
+            analytics: {
+              totalViews: 0,
+              totalClicks: 0,
+              dailyHistory: (state.profile.analytics?.dailyHistory ?? []).map(
+                (entry) => ({ ...entry, views: 0, clicks: 0 })
+              ),
+            },
+          },
+        })),
+
       resetToDefault: () => set({ profile: DEFAULT_PROFILE }),
     }),
     {
@@ -133,7 +266,10 @@ export const useProfileStore = create<ProfileStore>()(
       version: 2,
       storage: createJSONStorage(() => localStorage),
       migrate: (persistedState: unknown, version: number): ProfileStore => {
-        const persisted = persistedState as Partial<ProfileStore> | null | undefined;
+        const persisted = persistedState as
+          | Partial<ProfileStore>
+          | null
+          | undefined;
         if (!persisted?.profile) {
           return { profile: DEFAULT_PROFILE } as ProfileStore;
         }
