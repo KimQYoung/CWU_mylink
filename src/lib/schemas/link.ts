@@ -32,6 +32,15 @@ const LINK_ICON_IDS = [
   "archive",
 ] as const satisfies readonly [LinkIconId, ...LinkIconId[]];
 
+const LINK_ICON_SET = new Set<string>(LINK_ICON_IDS);
+
+export function resolveLinkIconId(icon?: string): LinkIconId {
+  if (icon && LINK_ICON_SET.has(icon)) {
+    return icon as LinkIconId;
+  }
+  return "globe";
+}
+
 export function inferIconFromUrl(rawUrl: string): LinkIconId {
   const value = rawUrl.toLowerCase();
   if (value.includes("github.com")) return "github";
@@ -139,7 +148,16 @@ const URL_ERROR_MESSAGES: Record<
     "올바른 도메인 형식의 URL을 입력해 주세요. (예: https://github.com/username)",
 };
 
-export function createAddLinkSchema(existingLinks: LinkItem[]) {
+export interface LinkFormSchemaOptions {
+  excludeLinkId?: string;
+}
+
+export function createLinkFormSchema(
+  existingLinks: LinkItem[],
+  options: LinkFormSchemaOptions = {}
+) {
+  const { excludeLinkId } = options;
+
   return z.object({
     title: z
       .string()
@@ -171,7 +189,9 @@ export function createAddLinkSchema(existingLinks: LinkItem[]) {
           targetKey !== null &&
           existingLinks.some(
             (item) =>
-              item.url && normalizeUrlComparisonKey(item.url) === targetKey
+              item.id !== excludeLinkId &&
+              item.url &&
+              normalizeUrlComparisonKey(item.url) === targetKey
           );
 
         if (isDuplicate) {
@@ -200,4 +220,16 @@ export function createAddLinkSchema(existingLinks: LinkItem[]) {
   });
 }
 
-export type AddLinkFormValues = z.infer<ReturnType<typeof createAddLinkSchema>>;
+export function createAddLinkSchema(existingLinks: LinkItem[]) {
+  return createLinkFormSchema(existingLinks);
+}
+
+export function createEditLinkSchema(
+  existingLinks: LinkItem[],
+  editingLinkId: string
+) {
+  return createLinkFormSchema(existingLinks, { excludeLinkId: editingLinkId });
+}
+
+export type LinkFormValues = z.infer<ReturnType<typeof createLinkFormSchema>>;
+export type AddLinkFormValues = LinkFormValues;

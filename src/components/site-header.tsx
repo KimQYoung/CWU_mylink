@@ -1,6 +1,9 @@
 "use client";
 
 import Link from "next/link";
+import { Loader2 } from "lucide-react";
+import { useProfileStore } from "@/lib/store";
+import { useHydrated } from "@/lib/use-hydrated";
 import { cn } from "@/lib/utils";
 
 interface SiteHeaderProps {
@@ -20,6 +23,25 @@ export function SiteHeader({
   activeRoute,
   rightSlot,
 }: SiteHeaderProps) {
+  const hasMounted = useHydrated();
+  const firestoreStatus = useProfileStore((state) => state.firestoreStatus);
+  const isRefreshingLinks = useProfileStore((state) => state.isRefreshingLinks);
+  const updatingCount = useProfileStore((state) => state.updatingLinkIds.length);
+  const isLoading =
+    hasMounted &&
+    (firestoreStatus === "syncing" || isRefreshingLinks || updatingCount > 0);
+  const statusLabel =
+    hasMounted && firestoreStatus === "error"
+      ? "FIRESTORE ERROR"
+      : isLoading
+      ? updatingCount > 0
+        ? "FIRESTORE UPDATING"
+        : "FIRESTORE LOADING"
+      : "FIRESTORE DB";
+  const indicatorClass =
+    hasMounted && firestoreStatus === "error"
+      ? "bg-red-400"
+      : "bg-emerald-400";
   const navItems = [
     { key: "home" as const, label: "Overview", href: "/" },
     { key: "links" as const, label: "Links", href: "/links" },
@@ -48,9 +70,13 @@ export function SiteHeader({
           </div>
 
           <div className="flex md:hidden items-center gap-1.5 shrink-0">
-            <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
+            {isLoading ? (
+              <Loader2 className="size-3 animate-spin text-amber-400" strokeWidth={1.75} />
+            ) : (
+              <span className={cn("h-1.5 w-1.5 rounded-full", indicatorClass)} />
+            )}
             <span className="font-mono text-[10px] uppercase tracking-[1.2px] text-body-mid">
-              SYNC
+              {isLoading ? "LOADING" : "DB"}
             </span>
           </div>
         </div>
@@ -81,9 +107,13 @@ export function SiteHeader({
         <div className="hidden md:flex items-center gap-2 shrink-0">
           {rightSlot ?? (
             <>
-              <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
+              {isLoading ? (
+                <Loader2 className="size-3 animate-spin text-amber-400" strokeWidth={1.75} />
+              ) : (
+                <span className={cn("h-1.5 w-1.5 rounded-full", indicatorClass)} />
+              )}
               <span className="font-mono text-[11px] uppercase tracking-[1.4px] text-body-mid">
-                IN-MEMORY STATE
+                {statusLabel}
               </span>
             </>
           )}

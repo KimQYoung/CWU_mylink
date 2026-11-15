@@ -1,12 +1,14 @@
 "use client";
 
-import { ArrowUpRight } from "lucide-react";
+import { ArrowUpRight, Loader2, Pencil, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
 import { LinkIcon } from "@/components/link-icon";
+import { LinkInlineEditor } from "@/components/link-inline-editor";
 import { CopyFeedbackContent } from "@/components/status-toast";
+import type { UpdateAnonymousLinkInput } from "@/lib/firestore-links";
 import { cn } from "@/lib/utils";
 import type { LinkItem, ThemeId } from "@/types";
 
@@ -16,9 +18,17 @@ interface LinkCardProps {
   mode?: "directory" | "public";
   theme?: ThemeId;
   copied?: boolean;
+  isUpdating?: boolean;
+  isDeleting?: boolean;
+  existingLinks?: LinkItem[];
+  isEditing?: boolean;
   onCopyEmail?: (link: LinkItem) => void;
   onLinkClick?: (link: LinkItem) => void;
   onToggleActive?: (id: string) => void;
+  onEditStart?: (link: LinkItem) => void;
+  onEditCancel?: () => void;
+  onSaveEdit?: (id: string, input: UpdateAnonymousLinkInput) => Promise<void>;
+  onDeleteRequest?: (link: LinkItem) => void;
 }
 
 const PUBLIC_THEME_CARD: Record<
@@ -87,22 +97,53 @@ export function LinkCard({
   mode = "public",
   theme = "xai",
   copied = false,
+  isUpdating = false,
+  isDeleting = false,
+  existingLinks,
+  isEditing = false,
   onCopyEmail,
   onLinkClick,
   onToggleActive,
+  onEditStart,
+  onEditCancel,
+  onSaveEdit,
+  onDeleteRequest,
 }: LinkCardProps) {
   const endpointNumber = String(link.order || index + 1).padStart(2, "0");
   const label = link.endpointLabel || `ENDPOINT ${endpointNumber}`;
   const display = link.displayUrl || link.url || "";
   const isDirectory = mode === "directory";
+  const isBusy = isUpdating || isDeleting;
+  const hasManagementActions = Boolean(onEditStart || onDeleteRequest);
   const themeStyles = PUBLIC_THEME_CARD[theme];
+
+  if (isEditing && onSaveEdit) {
+    return (
+      <Card
+        className={cn(
+          themeStyles.card,
+          "border-white/30"
+        )}
+      >
+        <LinkInlineEditor
+          link={link}
+          endpointLabel={label}
+          existingLinks={existingLinks ?? [link]}
+          onCancel={() => onEditCancel?.()}
+          onSave={onSaveEdit}
+        />
+      </Card>
+    );
+  }
 
   return (
     <Card
       className={cn(
         themeStyles.card,
         "flex flex-col justify-between gap-4",
-        isDirectory ? "lg:flex-row lg:items-center lg:gap-6" : "sm:flex-row sm:items-center sm:gap-5",
+        isDirectory || hasManagementActions
+          ? "lg:flex-row lg:items-center lg:gap-6"
+          : "sm:flex-row sm:items-center sm:gap-5",
         isDirectory && !link.isActive && "opacity-75 border-dashed"
       )}
     >
@@ -170,7 +211,7 @@ export function LinkCard({
         className={cn(
           "flex flex-col gap-3 pt-3 border-t shrink-0",
           themeStyles.divider,
-          isDirectory
+          isDirectory || hasManagementActions
             ? "sm:flex-row sm:items-center sm:justify-between lg:justify-end lg:border-t-0 lg:pt-0"
             : "sm:flex-row sm:items-center sm:border-t-0 sm:pt-0"
         )}
@@ -180,50 +221,119 @@ export function LinkCard({
             <span className="font-mono text-[11px] uppercase tracking-[1.2px] text-body-mid sm:hidden">
               PUBLIC VISIBILITY
             </span>
-            <label className="inline-flex items-center gap-2 cursor-pointer select-none">
+            <label
+              className={cn(
+                "inline-flex items-center gap-2 select-none",
+                isBusy ? "cursor-wait" : "cursor-pointer"
+              )}
+            >
               <Switch
                 checked={link.isActive}
+                disabled={isBusy}
                 onCheckedChange={() => onToggleActive(link.id)}
                 aria-label={`${link.title} 공개 여부 토글`}
               />
-              <span className="font-mono text-[11px] uppercase tracking-[1.2px] text-body-mid sm:w-14">
-                {link.isActive ? "VISIBLE" : "HIDDEN"}
+              <span className="inline-flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-[1.2px] text-body-mid sm:w-20">
+                {isDeleting ? (
+                  <>
+                    <Loader2 className="size-3 animate-spin text-red-400" strokeWidth={1.75} />
+                    <span className="text-red-300">DELETING</span>
+                  </>
+                ) : isUpdating ? (
+                  <>
+                    <Loader2 className="size-3 animate-spin text-amber-400" strokeWidth={1.75} />
+                    <span className="text-amber-300">SAVING</span>
+                  </>
+                ) : link.isActive ? (
+                  "VISIBLE"
+                ) : (
+                  "HIDDEN"
+                )}
               </span>
             </label>
           </div>
         )}
 
-        {link.isAction && link.actionType === "copy-email" ? (
-          <Button
-            type="button"
-            variant="default"
-            onClick={() => onCopyEmail?.(link)}
-            className={cn("w-full sm:w-auto", themeStyles.primaryCta)}
-          >
-            <CopyFeedbackContent
-              copied={copied}
-              defaultLabel={link.buttonText || "Copy Address"}
-              copiedLabel={mode === "public" ? "Copied" : "Copied to Clipboard"}
-            />
-          </Button>
-        ) : (
-          <a
-            href={link.url}
-            target="_blank"
-            rel="noopener noreferrer"
-            onClick={() => onLinkClick?.(link)}
-            className={cn(
-              buttonVariants({ variant: "outline" }),
-              "w-full sm:w-auto",
-              themeStyles.outlineCta
-            )}
-          >
-            <span>
-              {link.buttonText?.replace(/\s*↗$/, "") || "Open Link"}
-            </span>
-            <ArrowUpRight className="size-4" strokeWidth={1.5} />
-          </a>
-        )}
+        <div
+          className={cn(
+            "flex flex-col sm:flex-row sm:items-center gap-2",
+            !hasManagementActions && "w-full sm:w-auto"
+          )}
+        >
+          {hasManagementActions && (
+            <div className="flex items-center gap-2 w-full sm:w-auto">
+              {onEditStart && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={isBusy}
+                  onClick={() => onEditStart(link)}
+                  aria-label={`${link.title} 수정`}
+                  className="flex-1 sm:flex-none"
+                >
+                  <Pencil className="size-3.5" strokeWidth={1.5} />
+                  <span>수정</span>
+                </Button>
+              )}
+
+              {onDeleteRequest && (
+                <Button
+                  type="button"
+                  variant="destructive"
+                  size="sm"
+                  disabled={isBusy}
+                  aria-busy={isDeleting}
+                  onClick={() => onDeleteRequest(link)}
+                  aria-label={`${link.title} 삭제`}
+                  className={cn(
+                    "flex-1 sm:flex-none",
+                    isDeleting && "disabled:opacity-80"
+                  )}
+                >
+                  {isDeleting ? (
+                    <Loader2 className="size-3.5 animate-spin" strokeWidth={1.5} />
+                  ) : (
+                    <Trash2 className="size-3.5" strokeWidth={1.5} />
+                  )}
+                  <span>삭제</span>
+                </Button>
+              )}
+            </div>
+          )}
+
+          {link.isAction && link.actionType === "copy-email" ? (
+            <Button
+              type="button"
+              variant="default"
+              onClick={() => onCopyEmail?.(link)}
+              className={cn("w-full sm:w-auto", themeStyles.primaryCta)}
+            >
+              <CopyFeedbackContent
+                copied={copied}
+                defaultLabel={link.buttonText || "Copy Address"}
+                copiedLabel={mode === "public" ? "Copied" : "Copied to Clipboard"}
+              />
+            </Button>
+          ) : (
+            <a
+              href={link.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={() => onLinkClick?.(link)}
+              className={cn(
+                buttonVariants({ variant: "outline" }),
+                "w-full sm:w-auto",
+                themeStyles.outlineCta
+              )}
+            >
+              <span>
+                {link.buttonText?.replace(/\s*↗$/, "") || "Open Link"}
+              </span>
+              <ArrowUpRight className="size-4" strokeWidth={1.5} />
+            </a>
+          )}
+        </div>
       </div>
     </Card>
   );

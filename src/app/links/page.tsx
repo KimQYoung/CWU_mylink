@@ -6,7 +6,7 @@ import {
   ArrowUpDown,
   ArrowUpRight,
   Plus,
-  RotateCcw,
+  RefreshCw,
   Search,
   Share2,
 } from "lucide-react";
@@ -14,6 +14,8 @@ import {
   AddLinkDialog,
   type AddedLinkSummary,
 } from "@/components/add-link-dialog";
+import { DeleteLinkDialog } from "@/components/delete-link-dialog";
+import { FirestoreStatusBanner } from "@/components/firestore-status-banner";
 import { LinkCard } from "@/components/link-card";
 import { SiteHeader } from "@/components/site-header";
 import { StatusToast } from "@/components/status-toast";
@@ -21,29 +23,41 @@ import { Button, buttonVariants } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
+import { sortLinksByCreatedAtDesc } from "@/lib/firestore-links";
 import { DEFAULT_PROFILE, useProfileStore } from "@/lib/store";
 import { useHydrated } from "@/lib/use-hydrated";
+import { useLinkManagement } from "@/lib/use-link-management";
 import { cn } from "@/lib/utils";
 import type { LinkItem } from "@/types";
 
 type StatusFilter = "all" | "active" | "hidden";
-type SortMode = "order" | "clicks";
+type SortMode = "latest" | "clicks";
 
 export default function LinksPage() {
   const hasMounted = useHydrated();
   const storeProfile = useProfileStore((state) => state.profile);
+  const firestoreStatus = useProfileStore((state) => state.firestoreStatus);
+  const firestoreError = useProfileStore((state) => state.firestoreError);
+  const isRefreshingLinks = useProfileStore((state) => state.isRefreshingLinks);
+  const updatingLinkIds = useProfileStore((state) => state.updatingLinkIds);
+  const loadFirestoreLinks = useProfileStore(
+    (state) => state.loadFirestoreLinks
+  );
   const toggleLink = useProfileStore((state) => state.toggleLink);
+  const updateLink = useProfileStore((state) => state.updateLink);
+  const deleteLink = useProfileStore((state) => state.deleteLink);
   const recordLinkClick = useProfileStore((state) => state.recordLinkClick);
-  const resetToDefault = useProfileStore((state) => state.resetToDefault);
 
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
-  const [sortMode, setSortMode] = useState<SortMode>("order");
+  const [sortMode, setSortMode] = useState<SortMode>("latest");
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [copiedLinkId, setCopiedLinkId] = useState<string | null>(null);
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
 
   const profile = hasMounted ? storeProfile : DEFAULT_PROFILE;
+  const isLoadingLinks =
+    hasMounted && (firestoreStatus === "syncing" || isRefreshingLinks);
 
   const showToast = (message: string) => {
     setToastMessage(message);
@@ -52,8 +66,25 @@ export default function LinksPage() {
     }, 2400);
   };
 
+  const {
+    editingLinkId,
+    deletingLink,
+    deletingLinkId,
+    handleEditStart,
+    handleEditCancel,
+    handleSaveEdit,
+    handleDeleteRequest,
+    handleDeleteDialogOpenChange,
+    handleConfirmDelete,
+  } = useLinkManagement({
+    links: profile.links,
+    updateLink,
+    deleteLink,
+    onSuccessToast: showToast,
+  });
+
   const orderedLinks = useMemo(
-    () => [...profile.links].sort((a, b) => a.order - b.order),
+    () => sortLinksByCreatedAtDesc(profile.links),
     [profile.links]
   );
 
@@ -132,7 +163,7 @@ export default function LinksPage() {
   const clearFilters = () => {
     setSearchQuery("");
     setStatusFilter("all");
-    setSortMode("order");
+    setSortMode("latest");
   };
 
   const handleLinkAdded = (created: AddedLinkSummary) => {
@@ -293,28 +324,70 @@ export default function LinksPage() {
               size="sm"
               variant="secondary"
               onClick={() =>
-                setSortMode((prev) => (prev === "order" ? "clicks" : "order"))
+                setSortMode((prev) => (prev === "latest" ? "clicks" : "latest"))
               }
               className="font-mono text-[11px] tracking-[1.2px] w-full sm:w-auto"
             >
               <ArrowUpDown className="size-3.5" strokeWidth={1.5} />
-              <span>{sortMode === "order" ? "SORT: ORDER" : "SORT: CLICKS"}</span>
+              <span>{sortMode === "latest" ? "SORT: LATEST" : "SORT: CLICKS"}</span>
             </Button>
           </div>
         </section>
 
         {/* LINK LIST */}
         <section className="space-y-3" aria-label="링크 목록">
-          <div className="flex flex-col min-[380px]:flex-row min-[380px]:items-center justify-between gap-1 pb-1">
+          <div className="flex flex-col min-[380px]:flex-row min-[380px]:items-center justify-between gap-2 pb-1">
             <p className="font-mono text-xs uppercase tracking-[1.4px] text-body-mid">
               {"// ENDPOINT REGISTRY"}
             </p>
-            <span className="font-mono text-xs uppercase tracking-[1.2px] text-body-mid">
-              SHOWING {filteredLinks.length} OF {orderedLinks.length}
-            </span>
+            <div className="flex items-center justify-between sm:justify-end gap-3">
+              <Button
+                type="button"
+                variant="outline"
+                size="xs"
+                disabled={isLoadingLinks}
+                onClick={() => void loadFirestoreLinks()}
+                className="font-mono text-[10px] uppercase tracking-[1px]"
+              >
+                <RefreshCw
+                  className={cn("size-3", isLoadingLinks && "animate-spin")}
+                  strokeWidth={1.5}
+                />
+                <span>{isLoadingLinks ? "갱신 중..." : "새로고침"}</span>
+              </Button>
+              <span className="font-mono text-xs uppercase tracking-[1.2px] text-body-mid">
+                SHOWING {filteredLinks.length} OF {orderedLinks.length}
+              </span>
+            </div>
           </div>
 
-          {filteredLinks.length === 0 ? (
+          <FirestoreStatusBanner
+            isLoading={isLoadingLinks}
+            error={hasMounted ? firestoreError : null}
+            loadingMessage="Firestore(users/anonymous/links)에서 최신 링크 목록을 불러오는 중입니다..."
+            onRetry={() => void loadFirestoreLinks()}
+          />
+
+          {orderedLinks.length === 0 && !isLoadingLinks ? (
+            <Card className="p-8 sm:p-10 text-center space-y-4">
+              <p className="font-mono text-xs uppercase tracking-[1.4px] text-body-mid">
+                {"// NO REGISTERED ENDPOINTS"}
+              </p>
+              <p className="text-base font-normal text-body">
+                아직 Firestore(users/anonymous/links)에 저장된 링크가 없습니다.
+              </p>
+              <div className="pt-1">
+                <Button
+                  type="button"
+                  variant="default"
+                  onClick={() => setIsAddDialogOpen(true)}
+                >
+                  <Plus className="size-4" strokeWidth={1.5} />
+                  <span>첫 링크 추가하기</span>
+                </Button>
+              </div>
+            </Card>
+          ) : filteredLinks.length === 0 && !isLoadingLinks ? (
             <Card className="p-8 sm:p-10 text-center space-y-4">
               <p className="font-mono text-xs uppercase tracking-[1.4px] text-body-mid">
                 {"// NO MATCHING ENDPOINTS"}
@@ -329,7 +402,12 @@ export default function LinksPage() {
               </div>
             </Card>
           ) : (
-            <div className="space-y-3">
+            <div
+              className={cn(
+                "space-y-3 transition-opacity",
+                isLoadingLinks && "opacity-65"
+              )}
+            >
               {filteredLinks.map((link, index) => (
                 <LinkCard
                   key={link.id}
@@ -338,9 +416,17 @@ export default function LinksPage() {
                   mode="directory"
                   theme="xai"
                   copied={copiedLinkId === link.id}
+                  isUpdating={updatingLinkIds.includes(link.id)}
+                  isDeleting={deletingLinkId === link.id}
+                  existingLinks={profile.links}
+                  isEditing={editingLinkId === link.id}
                   onCopyEmail={handleCopyEmail}
                   onLinkClick={(item) => recordLinkClick(item.id)}
                   onToggleActive={handleToggleActive}
+                  onEditStart={handleEditStart}
+                  onEditCancel={handleEditCancel}
+                  onSaveEdit={handleSaveEdit}
+                  onDeleteRequest={handleDeleteRequest}
                 />
               ))}
             </div>
@@ -353,25 +439,26 @@ export default function LinksPage() {
         <section className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
           <div className="space-y-1">
             <p className="font-mono text-xs uppercase tracking-[1.4px] text-body-mid">
-              {"// IN-MEMORY LOCAL STATE"}
+              {"// FIRESTORE PERSISTENCE (users/anonymous/links)"}
             </p>
             <p className="text-sm font-normal text-body-mid">
-              추가한 링크와 공개 상태, 클릭 카운터는 현재 메모리 상태에서 즉시
-              반영되며 새로고침 시 기본 더미 데이터로 초기화됩니다.
+              새로 추가한 링크와 해당 링크의 공개 상태·클릭 카운터는 Cloud
+              Firestore(users/anonymous/links)에 저장되어 새로고침 후에도 유지됩니다.
             </p>
           </div>
           <Button
             type="button"
             variant="ghost"
             size="sm"
-            onClick={() => {
-              resetToDefault();
-              showToast("RESET TO DEFAULT DUMMY_LINKS (7 ENDPOINTS)");
-            }}
+            disabled={isLoadingLinks}
+            onClick={() => void loadFirestoreLinks()}
             className="font-mono text-[11px] uppercase tracking-[1.2px] w-full sm:w-auto"
           >
-            <RotateCcw className="size-3.5" strokeWidth={1.5} />
-            <span>Reset Default Data</span>
+            <RefreshCw
+              className={cn("size-3.5", isLoadingLinks && "animate-spin")}
+              strokeWidth={1.5}
+            />
+            <span>{isLoadingLinks ? "Refreshing..." : "Reload Firestore"}</span>
           </Button>
         </section>
       </main>
@@ -391,6 +478,13 @@ export default function LinksPage() {
         open={isAddDialogOpen}
         onOpenChange={setIsAddDialogOpen}
         onAdded={handleLinkAdded}
+      />
+
+      <DeleteLinkDialog
+        link={deletingLink}
+        open={Boolean(deletingLink)}
+        onOpenChange={handleDeleteDialogOpenChange}
+        onConfirmDelete={handleConfirmDelete}
       />
 
       <StatusToast message={toastMessage} theme="xai" />

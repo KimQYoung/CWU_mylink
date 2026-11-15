@@ -11,6 +11,7 @@ export interface LinkItem {
   icon?: string;              // 아이콘 식별자 (예: "github", "code", "file-text")
   isActive: boolean;
   order: number;
+  createdAt?: number;         // 생성 시각 (Unix timestamp, ms)
   clicks?: number;            // 링크별 누적 클릭수
   isAction?: boolean;         // 외부 링크 이동 대신 내부 액션(예: 이메일 복사) 여부
   actionType?: "copy-email";

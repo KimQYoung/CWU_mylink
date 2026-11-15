@@ -3,19 +3,23 @@
 import { useMemo, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { ArrowRight, Plus } from "lucide-react";
+import { ArrowRight, Plus, RefreshCw } from "lucide-react";
 import {
   AddLinkDialog,
   type AddedLinkSummary,
 } from "@/components/add-link-dialog";
+import { DeleteLinkDialog } from "@/components/delete-link-dialog";
+import { FirestoreStatusBanner } from "@/components/firestore-status-banner";
 import { LinkCard } from "@/components/link-card";
 import { SiteHeader } from "@/components/site-header";
 import { StatusToast } from "@/components/status-toast";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
+import { sortLinksByCreatedAtDesc } from "@/lib/firestore-links";
 import { DEFAULT_PROFILE, useProfileStore } from "../lib/store";
 import { useHydrated } from "@/lib/use-hydrated";
+import { useLinkManagement } from "@/lib/use-link-management";
 import { cn } from "@/lib/utils";
 import type { LinkItem } from "@/types";
 
@@ -26,9 +30,20 @@ export default function Home() {
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
 
   const storeProfile = useProfileStore((state) => state.profile);
+  const firestoreStatus = useProfileStore((state) => state.firestoreStatus);
+  const firestoreError = useProfileStore((state) => state.firestoreError);
+  const isRefreshingLinks = useProfileStore((state) => state.isRefreshingLinks);
+  const updatingLinkIds = useProfileStore((state) => state.updatingLinkIds);
+  const loadFirestoreLinks = useProfileStore(
+    (state) => state.loadFirestoreLinks
+  );
+  const updateLink = useProfileStore((state) => state.updateLink);
+  const deleteLink = useProfileStore((state) => state.deleteLink);
   const recordLinkClick = useProfileStore((state) => state.recordLinkClick);
 
   const profile = hasMounted ? storeProfile : DEFAULT_PROFILE;
+  const isLoadingLinks =
+    hasMounted && (firestoreStatus === "syncing" || isRefreshingLinks);
 
   const showToast = (message: string) => {
     setToastMessage(message);
@@ -36,6 +51,23 @@ export default function Home() {
       setToastMessage((current) => (current === message ? null : current));
     }, 2400);
   };
+
+  const {
+    editingLinkId,
+    deletingLink,
+    deletingLinkId,
+    handleEditStart,
+    handleEditCancel,
+    handleSaveEdit,
+    handleDeleteRequest,
+    handleDeleteDialogOpenChange,
+    handleConfirmDelete,
+  } = useLinkManagement({
+    links: profile.links,
+    updateLink,
+    deleteLink,
+    onSuccessToast: showToast,
+  });
 
   const handleCopyEmail = (link: LinkItem) => {
     if (!profile.email) return;
@@ -57,10 +89,7 @@ export default function Home() {
   };
 
   const activeLinks = useMemo(
-    () =>
-      [...profile.links]
-        .filter((l) => l.isActive)
-        .sort((a, b) => a.order - b.order),
+    () => sortLinksByCreatedAtDesc(profile.links).filter((l) => l.isActive),
     [profile.links]
   );
 
@@ -144,7 +173,7 @@ export default function Home() {
           </div>
         </section>
 
-        {/* DIRECTORY & ACCESS (LINK CARDS FROM MEMORY STATE) */}
+        {/* DIRECTORY & ACCESS (LINK CARDS LOADED FROM FIRESTORE) */}
         <section className="space-y-6">
           <Separator />
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -160,6 +189,20 @@ export default function Home() {
             <div className="grid grid-cols-1 min-[380px]:grid-cols-2 sm:flex items-center gap-2 w-full sm:w-auto">
               <Button
                 type="button"
+                variant="outline"
+                size="sm"
+                disabled={isLoadingLinks}
+                onClick={() => void loadFirestoreLinks()}
+                className="w-full sm:w-auto font-mono text-[11px] uppercase tracking-[1.2px]"
+              >
+                <RefreshCw
+                  className={cn("size-3.5", isLoadingLinks && "animate-spin")}
+                  strokeWidth={1.5}
+                />
+                <span>{isLoadingLinks ? "갱신 중..." : "새로고침"}</span>
+              </Button>
+              <Button
+                type="button"
                 variant="default"
                 size="sm"
                 onClick={() => setIsAddDialogOpen(true)}
@@ -172,7 +215,7 @@ export default function Home() {
                 href="/links"
                 className={cn(
                   buttonVariants({ variant: "outline", size: "sm" }),
-                  "w-full sm:w-auto font-mono text-[11px] uppercase tracking-[1.2px]"
+                  "min-[380px]:col-span-2 sm:col-span-1 w-full sm:w-auto font-mono text-[11px] uppercase tracking-[1.2px]"
                 )}
               >
                 <span>All Links ({profile.links.length})</span>
@@ -181,20 +224,62 @@ export default function Home() {
             </div>
           </div>
 
-          <div className="space-y-3">
-            {activeLinks.map((link, index) => (
-              <LinkCard
-                key={link.id}
-                link={link}
-                index={index}
-                mode="public"
-                theme="xai"
-                copied={copiedId === link.id}
-                onCopyEmail={handleCopyEmail}
-                onLinkClick={(item) => recordLinkClick(item.id)}
-              />
-            ))}
-          </div>
+          <FirestoreStatusBanner
+            isLoading={isLoadingLinks}
+            error={hasMounted ? firestoreError : null}
+            loadingMessage="Firestore(users/anonymous/links)에서 최신 링크 목록을 불러오는 중입니다..."
+            onRetry={() => void loadFirestoreLinks()}
+          />
+
+          {activeLinks.length === 0 && !isLoadingLinks ? (
+            <Card className="p-8 sm:p-10 text-center space-y-4">
+              <p className="font-mono text-xs uppercase tracking-[1.4px] text-body-mid">
+                {"// NO VERIFIED ENDPOINTS"}
+              </p>
+              <p className="text-sm sm:text-base font-normal text-body">
+                아직 Firestore(users/anonymous/links)에 등록된 공개 링크가 없습니다.
+              </p>
+              <div className="pt-1">
+                <Button
+                  type="button"
+                  variant="default"
+                  size="sm"
+                  onClick={() => setIsAddDialogOpen(true)}
+                >
+                  <Plus className="size-3.5" strokeWidth={1.5} />
+                  <span>첫 링크 추가하기</span>
+                </Button>
+              </div>
+            </Card>
+          ) : (
+            <div
+              className={cn(
+                "space-y-3 transition-opacity",
+                isLoadingLinks && "opacity-65"
+              )}
+            >
+              {activeLinks.map((link, index) => (
+                <LinkCard
+                  key={link.id}
+                  link={link}
+                  index={index}
+                  mode="public"
+                  theme="xai"
+                  copied={copiedId === link.id}
+                  isUpdating={updatingLinkIds.includes(link.id)}
+                  isDeleting={deletingLinkId === link.id}
+                  existingLinks={profile.links}
+                  isEditing={editingLinkId === link.id}
+                  onCopyEmail={handleCopyEmail}
+                  onLinkClick={(item) => recordLinkClick(item.id)}
+                  onEditStart={handleEditStart}
+                  onEditCancel={handleEditCancel}
+                  onSaveEdit={handleSaveEdit}
+                  onDeleteRequest={handleDeleteRequest}
+                />
+              ))}
+            </div>
+          )}
         </section>
 
         {/* CORE CAPABILITIES & STACK */}
@@ -238,7 +323,7 @@ export default function Home() {
             </p>
             <p className="text-xs text-body-mid">
               Engineered with restraint • Strict Dark Canvas • xAI Design System •
-              In-Memory State Driven
+              Cloud Firestore (users/anonymous/links)
             </p>
           </div>
 
@@ -252,6 +337,13 @@ export default function Home() {
         open={isAddDialogOpen}
         onOpenChange={setIsAddDialogOpen}
         onAdded={handleLinkAdded}
+      />
+
+      <DeleteLinkDialog
+        link={deletingLink}
+        open={Boolean(deletingLink)}
+        onOpenChange={handleDeleteDialogOpenChange}
+        onConfirmDelete={handleConfirmDelete}
       />
 
       <StatusToast message={toastMessage} theme="xai" />
