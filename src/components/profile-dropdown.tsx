@@ -4,10 +4,10 @@ import { useState } from "react";
 import Link from "next/link";
 import {
   ArrowLeftRight,
+  BarChart3,
   Check,
   Copy,
   ExternalLink,
-  FolderKanban,
   Loader2,
   LogOut,
   RefreshCw,
@@ -250,15 +250,15 @@ export function ProfileDropdown({ onToast }: ProfileDropdownProps) {
 
               <Menu.LinkItem
                 closeOnClick
-                render={<Link href="/links" />}
+                render={<Link href="/stats" />}
                 className={MENU_ITEM_CLASS}
               >
                 <span className="inline-flex items-center gap-2">
-                  <FolderKanban className="size-3.5 text-body-mid shrink-0" strokeWidth={1.5} />
-                  <span>링크 디렉토리 관리</span>
+                  <BarChart3 className="size-3.5 text-body-mid shrink-0" strokeWidth={1.5} />
+                  <span>링크 관리 · 통계</span>
                 </span>
-                <span className="font-mono text-[10px] text-body-mid">
-                  {totalLinks}
+                <span className="font-mono text-[10px] text-sunset">
+                  {totalLinks}개 · {totalClicks.toLocaleString()}
                 </span>
               </Menu.LinkItem>
 

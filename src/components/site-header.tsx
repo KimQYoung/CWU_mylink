@@ -59,11 +59,12 @@ export function SiteHeader({ rightSlot, onToast }: SiteHeaderProps) {
 
   const singleSegment = getSafePathSegment(pathname);
   const isHomeActive = pathname === "/";
-  const isLinksActive = pathname === "/links";
+  const isStatsActive = pathname === "/stats" || pathname === "/links";
   const isPersonalPageActive =
     Boolean(displayName) &&
     Boolean(singleSegment) &&
     singleSegment !== "links" &&
+    singleSegment !== "stats" &&
     normalizeDisplayNameKey(singleSegment) ===
       normalizeDisplayNameKey(displayName);
 
@@ -94,8 +95,8 @@ export function SiteHeader({ rightSlot, onToast }: SiteHeaderProps) {
               <Link href="/" className={navLinkClass(isHomeActive)}>
                 마이페이지
               </Link>
-              <Link href="/links" className={navLinkClass(isLinksActive)}>
-                링크 관리
+              <Link href="/stats" className={navLinkClass(isStatsActive)}>
+                링크 관리 · 통계
               </Link>
               <Link
                 href={personalPageHref}
