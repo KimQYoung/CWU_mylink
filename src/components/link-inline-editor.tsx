@@ -9,10 +9,10 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import {
-  FIRESTORE_LINKS_PATH,
   formatLinkTimestamp,
   getFirestoreErrorMessage,
-  type UpdateAnonymousLinkInput,
+  getUserLinksPath,
+  type UpdateUserLinkInput,
 } from "@/lib/firestore-links";
 import {
   createEditLinkSchema,
@@ -20,6 +20,7 @@ import {
   resolveLinkIconId,
   type LinkFormValues,
 } from "@/lib/schemas/link";
+import { useProfileStore } from "@/lib/store";
 import type { LinkItem } from "@/types";
 
 interface LinkInlineEditorProps {
@@ -27,7 +28,7 @@ interface LinkInlineEditorProps {
   endpointLabel: string;
   existingLinks: LinkItem[];
   onCancel: () => void;
-  onSave: (id: string, input: UpdateAnonymousLinkInput) => Promise<void>;
+  onSave: (id: string, input: UpdateUserLinkInput) => Promise<void>;
 }
 
 const EDIT_VISIBILITY_DESCRIPTION = {
@@ -46,6 +47,8 @@ export function LinkInlineEditor({
   onCancel,
   onSave,
 }: LinkInlineEditorProps) {
+  const authUser = useProfileStore((state) => state.authUser);
+  const linksPath = getUserLinksPath(authUser?.uid);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const formattedUpdatedAt = formatLinkTimestamp(link.updatedAt);
 
@@ -90,7 +93,7 @@ export function LinkInlineEditor({
         isActive: values.isActive,
       });
     } catch (error) {
-      setSubmitError(getFirestoreErrorMessage(error));
+      setSubmitError(getFirestoreErrorMessage(error, linksPath));
     }
   };
 
@@ -112,8 +115,8 @@ export function LinkInlineEditor({
         </div>
         <span className="font-mono text-[10px] uppercase tracking-[1.2px] text-body-mid">
           {formattedUpdatedAt
-            ? `UPDATED ${formattedUpdatedAt} · ${FIRESTORE_LINKS_PATH}`
-            : FIRESTORE_LINKS_PATH}
+            ? `UPDATED ${formattedUpdatedAt} · ${linksPath}`
+            : linksPath}
         </span>
       </div>
 

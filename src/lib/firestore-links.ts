@@ -17,10 +17,9 @@ import {
 import { getFirestoreDb } from "@/lib/firebase";
 import type { LinkItem } from "@/types";
 
-export const ANONYMOUS_USER_ID = "anonymous";
-export const FIRESTORE_LINKS_PATH = `users/${ANONYMOUS_USER_ID}/links` as const;
+export const DEFAULT_USER_LINKS_PATH = "users/{user.uid}/links" as const;
 
-export interface CreateAnonymousLinkInput {
+export interface CreateUserLinkInput {
   title: string;
   url: string;
   displayUrl: string;
@@ -33,7 +32,7 @@ export interface CreateAnonymousLinkInput {
   clicks?: number;
 }
 
-export interface UpdateAnonymousLinkInput {
+export interface UpdateUserLinkInput {
   title: string;
   url: string;
   displayUrl: string;
@@ -43,12 +42,30 @@ export interface UpdateAnonymousLinkInput {
   isActive: boolean;
 }
 
-function getLinksCollectionRef(db: Firestore) {
-  return collection(db, "users", ANONYMOUS_USER_ID, "links");
+/**
+ * 사용자 UID에 매핑된 개인화 Firestore 링크 컬렉션 경로를 반환합니다.
+ */
+export function getUserLinksPath(uid?: string | null): string {
+  const normalizedUid = uid?.trim();
+  return normalizedUid
+    ? `users/${normalizedUid}/links`
+    : DEFAULT_USER_LINKS_PATH;
 }
 
-function getLinkDocRef(db: Firestore, linkId: string) {
-  return doc(db, "users", ANONYMOUS_USER_ID, "links", linkId);
+function requireUserId(uid: string): string {
+  const normalizedUid = uid.trim();
+  if (!normalizedUid) {
+    throw new Error("로그인이 필요합니다. 사용자 UID를 확인할 수 없습니다.");
+  }
+  return normalizedUid;
+}
+
+function getLinksCollectionRef(db: Firestore, uid: string) {
+  return collection(db, "users", requireUserId(uid), "links");
+}
+
+function getLinkDocRef(db: Firestore, uid: string, linkId: string) {
+  return doc(db, "users", requireUserId(uid), "links", linkId);
 }
 
 function requireFirestoreDb(): Firestore {
@@ -164,12 +181,12 @@ export function sortLinksByCreatedAtDesc(links: LinkItem[]): LinkItem[] {
 }
 
 /**
- * Firestore `users/anonymous/links` 컬렉션에서 createdAt 최신순으로 링크 목록을 1회 조회합니다.
+ * Firestore `users/{uid}/links` 컬렉션에서 createdAt 최신순으로 링크 목록을 1회 조회합니다.
  */
-export async function fetchAnonymousLinks(): Promise<LinkItem[]> {
+export async function fetchUserLinks(uid: string): Promise<LinkItem[]> {
   const db = requireFirestoreDb();
   const linksQuery = query(
-    getLinksCollectionRef(db),
+    getLinksCollectionRef(db, uid),
     orderBy("createdAt", "desc")
   );
   const snapshot = await getDocs(linksQuery);
@@ -177,10 +194,11 @@ export async function fetchAnonymousLinks(): Promise<LinkItem[]> {
 }
 
 /**
- * 새 링크를 Firestore `users/anonymous/links` 컬렉션에 저장합니다.
+ * 새 링크를 Firestore `users/{uid}/links` 컬렉션에 저장합니다.
  */
-export async function createAnonymousLink(
-  input: CreateAnonymousLinkInput
+export async function createUserLink(
+  uid: string,
+  input: CreateUserLinkInput
 ): Promise<LinkItem> {
   const db = requireFirestoreDb();
   const endpointLabel =
@@ -204,7 +222,7 @@ export async function createAnonymousLink(
     updatedAt: serverTimestamp(),
   };
 
-  const docRef = await addDoc(getLinksCollectionRef(db), payload);
+  const docRef = await addDoc(getLinksCollectionRef(db, uid), payload);
   const now = Date.now();
 
   return {
@@ -225,17 +243,18 @@ export async function createAnonymousLink(
 }
 
 /**
- * Firestore `users/anonymous/links` 컬렉션의 특정 링크 문서를 수정합니다.
+ * Firestore `users/{uid}/links` 컬렉션의 특정 링크 문서를 수정합니다.
  */
-export async function updateAnonymousLink(
+export async function updateUserLink(
+  uid: string,
   linkId: string,
-  input: UpdateAnonymousLinkInput
+  input: UpdateUserLinkInput
 ): Promise<void> {
   const db = requireFirestoreDb();
   const buttonText = input.buttonText.trim() || "Open Link";
   const icon = input.icon || "globe";
 
-  await updateDoc(getLinkDocRef(db, linkId), {
+  await updateDoc(getLinkDocRef(db, uid, linkId), {
     title: input.title,
     url: input.url,
     displayUrl: input.displayUrl,
@@ -250,12 +269,13 @@ export async function updateAnonymousLink(
 /**
  * Firestore에 저장된 링크의 공개 활성화 상태를 업데이트합니다.
  */
-export async function updateAnonymousLinkActive(
+export async function updateUserLinkActive(
+  uid: string,
   linkId: string,
   isActive: boolean
 ): Promise<void> {
   const db = requireFirestoreDb();
-  await updateDoc(getLinkDocRef(db, linkId), {
+  await updateDoc(getLinkDocRef(db, uid, linkId), {
     isActive,
     updatedAt: serverTimestamp(),
   });
@@ -264,11 +284,12 @@ export async function updateAnonymousLinkActive(
 /**
  * Firestore에 저장된 링크의 클릭 수를 원자적으로 1 증가시킵니다.
  */
-export async function incrementAnonymousLinkClicks(
+export async function incrementUserLinkClicks(
+  uid: string,
   linkId: string
 ): Promise<void> {
   const db = requireFirestoreDb();
-  await updateDoc(getLinkDocRef(db, linkId), {
+  await updateDoc(getLinkDocRef(db, uid, linkId), {
     clicks: increment(1),
     updatedAt: serverTimestamp(),
   });
@@ -277,23 +298,29 @@ export async function incrementAnonymousLinkClicks(
 /**
  * Firestore에서 특정 링크 문서를 삭제합니다.
  */
-export async function deleteAnonymousLink(linkId: string): Promise<void> {
+export async function deleteUserLink(
+  uid: string,
+  linkId: string
+): Promise<void> {
   const db = requireFirestoreDb();
-  await deleteDoc(getLinkDocRef(db, linkId));
+  await deleteDoc(getLinkDocRef(db, uid, linkId));
 }
 
 /**
  * Firebase/Firestore 오류를 사용자에게 안내할 수 있는 한국어 메시지로 변환합니다.
  */
-export function getFirestoreErrorMessage(error: unknown): string {
+export function getFirestoreErrorMessage(
+  error: unknown,
+  linksPath: string = DEFAULT_USER_LINKS_PATH
+): string {
   if (error instanceof FirebaseError) {
     switch (error.code) {
       case "permission-denied":
-        return "Firestore 저장 권한이 없습니다. Firebase 보안 규칙(users/anonymous/links)을 확인해 주세요.";
+        return `Firestore 저장 권한이 없습니다. 로그인 상태 및 보안 규칙(${linksPath})을 확인해 주세요.`;
       case "unavailable":
         return "Firestore 서버에 연결할 수 없습니다. 네트워크 상태를 확인한 뒤 다시 시도해 주세요.";
       case "unauthenticated":
-        return "Firestore 인증이 필요합니다. 보안 규칙 또는 인증 설정을 확인해 주세요.";
+        return "Firestore 인증이 필요합니다. Google 계정으로 로그인한 뒤 다시 시도해 주세요.";
       case "not-found":
         return "대상 Firestore 문서를 찾을 수 없습니다.";
       default:

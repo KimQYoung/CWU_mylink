@@ -1,14 +1,24 @@
 import { create } from "zustand";
 import {
-  createAnonymousLink,
-  deleteAnonymousLink,
-  fetchAnonymousLinks,
+  deriveCallsignFromAuthUser,
+  deriveUsernameFromAuthUser,
+  getAuthErrorMessage,
+  getDisplayNameFromAuthUser,
+  signInWithGoogle,
+  signOutGoogle,
+  type AuthUserInfo,
+} from "./firebase-auth";
+import {
+  createUserLink,
+  deleteUserLink,
+  fetchUserLinks,
   getFirestoreErrorMessage,
-  incrementAnonymousLinkClicks,
+  getUserLinksPath,
+  incrementUserLinkClicks,
   sortLinksByCreatedAtDesc,
-  updateAnonymousLink,
-  updateAnonymousLinkActive,
-  type UpdateAnonymousLinkInput,
+  updateUserLink,
+  updateUserLinkActive,
+  type UpdateUserLinkInput,
 } from "./firestore-links";
 import {
   AnalyticsSummary,
@@ -20,6 +30,7 @@ import { DUMMY_ANALYTICS } from "./dummy-links";
 
 export { DUMMY_ANALYTICS };
 
+export type AuthStatus = "loading" | "authenticated" | "unauthenticated";
 export type FirestoreSyncStatus = "idle" | "syncing" | "connected" | "error";
 
 let latestLoadRequestId = 0;
@@ -71,6 +82,86 @@ function upsertLinkById(links: LinkItem[], target: LinkItem): LinkItem[] {
   return [target, ...links];
 }
 
+export const DEFAULT_PROFILE: UserProfile = {
+  username: "guest",
+  name: "MyLink 마이페이지",
+  callsign: "@guest",
+  discipline: "Personalized Links",
+  status: "Login Required",
+  headline:
+    "Google 계정으로 로그인하면 개인화된 Firestore 경로(users/{user.uid}/links)에 나만의 링크를 저장하고 관리할 수 있습니다.",
+  statementLead: "로그인 후 개인화된 마이링크 프로필을 시작하세요.",
+  statementBody:
+    "상단 헤더 또는 페이지 내 로그인 버튼을 통해 Google 계정을 연동하면 사용자 고유 UID 기반의 링크 디렉토리가 즉시 활성화됩니다.",
+  avatarUrl: "/avatar.png",
+  email: "",
+  theme: "xai",
+  capabilities: [
+    {
+      category: "CORE ARCHITECTURE",
+      headline: "Full-Stack Web Systems",
+      desc: "Next.js 16 (App Router), React 19, TypeScript. Engineered for performance and type-safe clarity.",
+    },
+    {
+      category: "AUTHENTICATION",
+      headline: "Google Social Sign-In",
+      desc: "Firebase Authentication OAuth 2.0 session management with instant header login and account switching.",
+    },
+    {
+      category: "DATA ISOLATION",
+      headline: "UID-Scoped Firestore Path",
+      desc: "Every link document is stored under users/{user.uid}/links for personalized persistence.",
+    },
+    {
+      category: "DESIGN & INTERACTION",
+      headline: "xAI Minimal Dark System",
+      desc: "Sparse monochrome aesthetics, geometric typography, pill controls, and hairline borders.",
+    },
+  ],
+  links: [],
+  analytics: DUMMY_ANALYTICS,
+};
+
+/**
+ * 로그인된 Google 사용자 정보와 링크 목록을 바탕으로 화면 표시용 프로필 객체를 구성합니다.
+ */
+export function buildProfileForAuthUser(
+  user: AuthUserInfo | null,
+  links: LinkItem[] = [],
+  currentAnalytics?: AnalyticsSummary
+): UserProfile {
+  if (!user) {
+    return {
+      ...DEFAULT_PROFILE,
+      links: [],
+      analytics: currentAnalytics ?? DUMMY_ANALYTICS,
+    };
+  }
+
+  const displayName = getDisplayNameFromAuthUser(user);
+  const username = deriveUsernameFromAuthUser(user);
+  const callsign = deriveCallsignFromAuthUser(user);
+  const linksPath = getUserLinksPath(user.uid);
+
+  return {
+    ...DEFAULT_PROFILE,
+    username,
+    name: displayName,
+    callsign,
+    discipline: "Google Account",
+    status: "Authenticated · Active",
+    headline: user.email
+      ? `${user.email} · Firestore 경로(${linksPath})에 연결된 개인화 마이페이지입니다.`
+      : `Firestore 경로(${linksPath})에 연결된 개인화 마이페이지입니다.`,
+    statementLead: `${displayName}님의 개인화된 마이페이지입니다.`,
+    statementBody: `Google 소셜 로그인 계정(${user.email ?? user.uid})으로 인증되었으며, 모든 링크와 클릭 통계는 Cloud Firestore(${linksPath}) 경로에 안전하게 분리 저장됩니다.`,
+    avatarUrl: user.photoURL || "/avatar.png",
+    email: user.email ?? "",
+    links: sortLinksByCreatedAtDesc(links),
+    analytics: currentAnalytics ?? DUMMY_ANALYTICS,
+  };
+}
+
 type StoreSet = (
   partial:
     | Partial<ProfileStore>
@@ -82,14 +173,18 @@ type StoreSet = (
  * 목록 재조회에만 실패한 경우 로컬 폴백 함수를 통해 일관된 UI 상태를 유지합니다.
  */
 async function refreshLinksAfterMutation(
+  uid: string,
   set: StoreSet,
+  get: () => ProfileStore,
   mergeRefreshedLinks: (refreshedLinks: LinkItem[]) => LinkItem[],
   applyLocalFallback: (currentLinks: LinkItem[]) => LinkItem[]
 ) {
   const requestId = ++latestLoadRequestId;
   try {
-    const refreshedLinks = await fetchAnonymousLinks();
-    if (requestId !== latestLoadRequestId) return;
+    const refreshedLinks = await fetchUserLinks(uid);
+    if (requestId !== latestLoadRequestId || get().authUser?.uid !== uid) {
+      return;
+    }
 
     const nextFirestoreLinks = sortLinksByCreatedAtDesc(
       mergeRefreshedLinks(refreshedLinks)
@@ -105,7 +200,9 @@ async function refreshLinksAfterMutation(
       },
     }));
   } catch {
-    if (requestId !== latestLoadRequestId) return;
+    if (requestId !== latestLoadRequestId || get().authUser?.uid !== uid) {
+      return;
+    }
 
     set((state) => {
       const nextFirestoreLinks = sortLinksByCreatedAtDesc(
@@ -125,55 +222,24 @@ async function refreshLinksAfterMutation(
   }
 }
 
-export const DEFAULT_PROFILE: UserProfile = {
-  username: "KimQYoung",
-  name: "Kim Kyu Young",
-  callsign: "@KimQYoung",
-  discipline: "Software Eng",
-  status: "Deploying Vibe Code",
-  headline:
-    "Junior software engineer exploring frontier web architectures, AI workflows, and rapid system engineering.",
-  statementLead: "아이디어를 코드로 실현하는 개발자 김규영입니다.",
-  statementBody:
-    "복잡한 문제를 단순하고 직관적인 코드로 풀어내는 과정을 지향합니다. 새로운 도구와 기술을 신속하게 습득하고, 실험을 통해 검증하며 함께 성장하는 엔지니어링 문화를 추구합니다.",
-  avatarUrl: "/avatar.png",
-  email: "103734455+KimQYoung@users.noreply.github.com",
-  theme: "xai",
-  capabilities: [
-    {
-      category: "CORE ARCHITECTURE",
-      headline: "Full-Stack Web Systems",
-      desc: "Next.js 16 (App Router), React 19, TypeScript. Engineered for performance and type-safe clarity.",
-    },
-    {
-      category: "DESIGN & INTERACTION",
-      headline: "Minimalist Interface Craft",
-      desc: "Tailwind CSS, PostCSS. Sparse monochrome aesthetics, geometric typography, and hairline precision.",
-    },
-    {
-      category: "ENGINEERING TOOLS",
-      headline: "Version & Scripting Protocols",
-      desc: "Git workflow, Python scripting, automated task pipelines, and agentic pair programming.",
-    },
-    {
-      category: "EXPLORATION DOMAIN",
-      headline: "Vibe Coding & AI Systems",
-      desc: "Rapid generative iteration, AI-native workflows, and prototype acceleration.",
-    },
-  ],
-  links: [],
-  analytics: DUMMY_ANALYTICS,
-};
-
 interface ProfileStore {
+  authStatus: AuthStatus;
+  authUser: AuthUserInfo | null;
+  isAuthSubmitting: boolean;
+  authError: string | null;
   profile: UserProfile;
   firestoreLinks: LinkItem[];
   firestoreStatus: FirestoreSyncStatus;
   firestoreError: string | null;
   isRefreshingLinks: boolean;
   updatingLinkIds: string[];
+  // 인증 액션
+  setAuthState: (status: AuthStatus, user: AuthUserInfo | null) => void;
+  signInWithGoogleAction: () => Promise<AuthUserInfo | null>;
+  signOutAction: () => Promise<void>;
+  clearAuthError: () => void;
   // Firestore 조회 및 상태 액션
-  loadFirestoreLinks: () => Promise<void>;
+  loadFirestoreLinks: (uid?: string) => Promise<void>;
   setFirestoreLinks: (links: LinkItem[]) => void;
   setFirestoreSyncState: (
     status: FirestoreSyncStatus,
@@ -184,7 +250,7 @@ interface ProfileStore {
   updateProfile: (partial: Partial<UserProfile>) => void;
   setTheme: (theme: ThemeId) => void;
   // 링크 CRUD 및 정렬 액션
-  updateLink: (id: string, input: UpdateAnonymousLinkInput) => Promise<LinkItem>;
+  updateLink: (id: string, input: UpdateUserLinkInput) => Promise<LinkItem>;
   addLink: (link: Omit<LinkItem, "id" | "order">) => Promise<LinkItem>;
   deleteLink: (id: string) => Promise<void>;
   toggleLink: (id: string) => void;
@@ -197,17 +263,22 @@ interface ProfileStore {
   resetToDefault: () => void;
 }
 
+function requireAuthenticatedUid(get: () => ProfileStore): string {
+  const uid = get().authUser?.uid;
+  if (!uid) {
+    throw new Error("로그인이 필요합니다. Google 계정으로 먼저 로그인해 주세요.");
+  }
+  return uid;
+}
+
 function toggleLinkState(
-  set: (
-    partial:
-      | Partial<ProfileStore>
-      | ((state: ProfileStore) => Partial<ProfileStore> | ProfileStore)
-  ) => void,
+  set: StoreSet,
   get: () => ProfileStore,
   id: string
 ) {
   const state = get();
-  if (state.updatingLinkIds.includes(id)) return;
+  const uid = state.authUser?.uid;
+  if (!uid || state.updatingLinkIds.includes(id)) return;
 
   const target = state.firestoreLinks.find((link) => link.id === id);
   if (!target) return;
@@ -215,6 +286,7 @@ function toggleLinkState(
   const nextIsActive = !target.isActive;
   const previousUpdatedAt = target.updatedAt;
   const optimisticUpdatedAt = Date.now();
+  const linksPath = getUserLinksPath(uid);
 
   set((current) => {
     const nextFirestoreLinks = current.firestoreLinks.map((link) =>
@@ -232,8 +304,10 @@ function toggleLinkState(
     };
   });
 
-  void updateAnonymousLinkActive(id, nextIsActive)
+  void updateUserLinkActive(uid, id, nextIsActive)
     .catch((error) => {
+      if (get().authUser?.uid !== uid) return;
+
       // Firestore 업데이트 실패 시 상태를 원복합니다.
       set((current) => {
         const revertedFirestoreLinks = current.firestoreLinks.map((link) =>
@@ -244,7 +318,7 @@ function toggleLinkState(
         return {
           firestoreLinks: revertedFirestoreLinks,
           firestoreStatus: "error",
-          firestoreError: getFirestoreErrorMessage(error),
+          firestoreError: getFirestoreErrorMessage(error, linksPath),
           profile: {
             ...current.profile,
             links: sortLinksByCreatedAtDesc(revertedFirestoreLinks),
@@ -262,6 +336,10 @@ function toggleLinkState(
 }
 
 export const useProfileStore = create<ProfileStore>()((set, get) => ({
+  authStatus: "loading",
+  authUser: null,
+  isAuthSubmitting: false,
+  authError: null,
   profile: DEFAULT_PROFILE,
   firestoreLinks: [],
   firestoreStatus: "idle",
@@ -269,8 +347,132 @@ export const useProfileStore = create<ProfileStore>()((set, get) => ({
   isRefreshingLinks: false,
   updatingLinkIds: [],
 
-  loadFirestoreLinks: async () => {
+  setAuthState: (status, user) => {
+    set((state) => {
+      if (status === "unauthenticated" || !user) {
+        latestLoadRequestId += 1;
+        return {
+          authStatus: status,
+          authUser: null,
+          firestoreLinks: [],
+          firestoreStatus: "idle",
+          firestoreError: null,
+          isRefreshingLinks: false,
+          updatingLinkIds: [],
+          profile: buildProfileForAuthUser(null, [], state.profile.analytics),
+        };
+      }
+
+      const isSameUser = state.authUser?.uid === user.uid;
+      const nextLinks = isSameUser ? state.firestoreLinks : [];
+      if (!isSameUser) {
+        latestLoadRequestId += 1;
+      }
+
+      return {
+        authStatus: status,
+        authUser: user,
+        authError: null,
+        firestoreLinks: nextLinks,
+        firestoreStatus: isSameUser ? state.firestoreStatus : "idle",
+        firestoreError: isSameUser ? state.firestoreError : null,
+        updatingLinkIds: isSameUser ? state.updatingLinkIds : [],
+        profile: buildProfileForAuthUser(
+          user,
+          nextLinks,
+          state.profile.analytics
+        ),
+      };
+    });
+  },
+
+  signInWithGoogleAction: async () => {
+    if (get().isAuthSubmitting) return null;
+
+    set({
+      isAuthSubmitting: true,
+      authError: null,
+    });
+
+    try {
+      const user = await signInWithGoogle();
+      set((state) => {
+        const isSameUser = state.authUser?.uid === user.uid;
+        const nextLinks = isSameUser ? state.firestoreLinks : [];
+        return {
+          authStatus: "authenticated",
+          authUser: user,
+          isAuthSubmitting: false,
+          authError: null,
+          profile: buildProfileForAuthUser(
+            user,
+            nextLinks,
+            state.profile.analytics
+          ),
+        };
+      });
+      return user;
+    } catch (error) {
+      set({
+        isAuthSubmitting: false,
+        authError: getAuthErrorMessage(error),
+      });
+      return null;
+    }
+  },
+
+  signOutAction: async () => {
+    if (get().isAuthSubmitting) return;
+
+    set({
+      isAuthSubmitting: true,
+      authError: null,
+    });
+
+    try {
+      await signOutGoogle();
+      latestLoadRequestId += 1;
+      set((state) => ({
+        authStatus: "unauthenticated",
+        authUser: null,
+        isAuthSubmitting: false,
+        authError: null,
+        firestoreLinks: [],
+        firestoreStatus: "idle",
+        firestoreError: null,
+        isRefreshingLinks: false,
+        updatingLinkIds: [],
+        profile: buildProfileForAuthUser(null, [], state.profile.analytics),
+      }));
+    } catch (error) {
+      set({
+        isAuthSubmitting: false,
+        authError: getAuthErrorMessage(error),
+      });
+    }
+  },
+
+  clearAuthError: () => set({ authError: null }),
+
+  loadFirestoreLinks: async (uid) => {
+    const targetUid = uid ?? get().authUser?.uid;
+    if (!targetUid) {
+      latestLoadRequestId += 1;
+      set((state) => ({
+        firestoreLinks: [],
+        firestoreStatus: "idle",
+        firestoreError: null,
+        isRefreshingLinks: false,
+        profile: {
+          ...state.profile,
+          links: [],
+        },
+      }));
+      return;
+    }
+
     const requestId = ++latestLoadRequestId;
+    const linksPath = getUserLinksPath(targetUid);
     set({
       firestoreStatus: "syncing",
       firestoreError: null,
@@ -278,8 +480,13 @@ export const useProfileStore = create<ProfileStore>()((set, get) => ({
     });
 
     try {
-      const links = await fetchAnonymousLinks();
-      if (requestId !== latestLoadRequestId) return;
+      const links = await fetchUserLinks(targetUid);
+      if (
+        requestId !== latestLoadRequestId ||
+        get().authUser?.uid !== targetUid
+      ) {
+        return;
+      }
 
       const sortedLinks = sortLinksByCreatedAtDesc(links);
       set((state) => ({
@@ -293,11 +500,16 @@ export const useProfileStore = create<ProfileStore>()((set, get) => ({
         },
       }));
     } catch (error) {
-      if (requestId !== latestLoadRequestId) return;
+      if (
+        requestId !== latestLoadRequestId ||
+        get().authUser?.uid !== targetUid
+      ) {
+        return;
+      }
 
       set({
         firestoreStatus: "error",
-        firestoreError: getFirestoreErrorMessage(error),
+        firestoreError: getFirestoreErrorMessage(error, linksPath),
         isRefreshingLinks: false,
       });
     }
@@ -335,6 +547,8 @@ export const useProfileStore = create<ProfileStore>()((set, get) => ({
     })),
 
   updateLink: async (id, input) => {
+    const uid = requireAuthenticatedUid(get);
+    const linksPath = getUserLinksPath(uid);
     const state = get();
     const target = state.firestoreLinks.find((link) => link.id === id);
     if (!target) {
@@ -366,7 +580,7 @@ export const useProfileStore = create<ProfileStore>()((set, get) => ({
     };
 
     try {
-      await updateAnonymousLink(id, {
+      await updateUserLink(uid, id, {
         ...input,
         buttonText,
         icon,
@@ -374,7 +588,7 @@ export const useProfileStore = create<ProfileStore>()((set, get) => ({
     } catch (error) {
       set((current) => ({
         firestoreStatus: "error",
-        firestoreError: getFirestoreErrorMessage(error),
+        firestoreError: getFirestoreErrorMessage(error, linksPath),
         isRefreshingLinks: false,
         updatingLinkIds: current.updatingLinkIds.filter(
           (itemId) => itemId !== id
@@ -385,7 +599,9 @@ export const useProfileStore = create<ProfileStore>()((set, get) => ({
 
     try {
       await refreshLinksAfterMutation(
+        uid,
         set,
+        get,
         (refreshedLinks) =>
           refreshedLinks.some((item) => item.id === id)
             ? refreshedLinks
@@ -405,6 +621,8 @@ export const useProfileStore = create<ProfileStore>()((set, get) => ({
   },
 
   addLink: async (newLink) => {
+    const uid = requireAuthenticatedUid(get);
+    const linksPath = getUserLinksPath(uid);
     const currentLinks = get().profile.links;
     const nextOrder =
       currentLinks.reduce((max, item) => Math.max(max, item.order), 0) + 1;
@@ -420,7 +638,7 @@ export const useProfileStore = create<ProfileStore>()((set, get) => ({
 
     let created: LinkItem;
     try {
-      created = await createAnonymousLink({
+      created = await createUserLink(uid, {
         title: newLink.title,
         url: newLink.url ?? "",
         displayUrl: newLink.displayUrl ?? "",
@@ -435,14 +653,16 @@ export const useProfileStore = create<ProfileStore>()((set, get) => ({
     } catch (error) {
       set({
         firestoreStatus: "error",
-        firestoreError: getFirestoreErrorMessage(error),
+        firestoreError: getFirestoreErrorMessage(error, linksPath),
         isRefreshingLinks: false,
       });
       throw error;
     }
 
     await refreshLinksAfterMutation(
+      uid,
       set,
+      get,
       (refreshedLinks) =>
         refreshedLinks.some((item) => item.id === created.id)
           ? refreshedLinks
@@ -454,6 +674,8 @@ export const useProfileStore = create<ProfileStore>()((set, get) => ({
   },
 
   deleteLink: async (id) => {
+    const uid = requireAuthenticatedUid(get);
+    const linksPath = getUserLinksPath(uid);
     const state = get();
     if (state.updatingLinkIds.includes(id)) return;
 
@@ -470,11 +692,11 @@ export const useProfileStore = create<ProfileStore>()((set, get) => ({
     }));
 
     try {
-      await deleteAnonymousLink(id);
+      await deleteUserLink(uid, id);
     } catch (error) {
       set((current) => ({
         firestoreStatus: "error",
-        firestoreError: getFirestoreErrorMessage(error),
+        firestoreError: getFirestoreErrorMessage(error, linksPath),
         isRefreshingLinks: false,
         updatingLinkIds: current.updatingLinkIds.filter(
           (itemId) => itemId !== id
@@ -485,7 +707,9 @@ export const useProfileStore = create<ProfileStore>()((set, get) => ({
 
     try {
       await refreshLinksAfterMutation(
+        uid,
         set,
+        get,
         (refreshedLinks) => refreshedLinks.filter((link) => link.id !== id),
         (currentLinks) => currentLinks.filter((link) => link.id !== id)
       );
@@ -539,10 +763,15 @@ export const useProfileStore = create<ProfileStore>()((set, get) => ({
     })),
 
   recordLinkClick: (linkId) => {
+    const uid = get().authUser?.uid;
+    if (!uid) return;
+
     const isFirestoreDoc = get().firestoreLinks.some(
       (link) => link.id === linkId
     );
     if (!isFirestoreDoc) return;
+
+    const linksPath = getUserLinksPath(uid);
 
     set((state) => {
       const nextFirestoreLinks = sortLinksByCreatedAtDesc(
@@ -562,9 +791,10 @@ export const useProfileStore = create<ProfileStore>()((set, get) => ({
       };
     });
 
-    void incrementAnonymousLinkClicks(linkId).catch((error) => {
+    void incrementUserLinkClicks(uid, linkId).catch((error) => {
+      if (get().authUser?.uid !== uid) return;
       set({
-        firestoreError: getFirestoreErrorMessage(error),
+        firestoreError: getFirestoreErrorMessage(error, linksPath),
       });
     });
   },
@@ -593,9 +823,10 @@ export const useProfileStore = create<ProfileStore>()((set, get) => ({
 
   resetToDefault: () =>
     set((state) => ({
-      profile: {
-        ...DEFAULT_PROFILE,
-        links: sortLinksByCreatedAtDesc(state.firestoreLinks),
-      },
+      profile: buildProfileForAuthUser(
+        state.authUser,
+        state.firestoreLinks,
+        state.profile.analytics
+      ),
     })),
 }));

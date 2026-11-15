@@ -1,17 +1,22 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import Image from "next/image";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { ArrowLeft, Loader2, Share2 } from "lucide-react";
+import { ArrowLeft, Loader2, LogOut, Share2 } from "lucide-react";
+import { AuthRequiredView } from "@/components/auth-required-view";
 import { FirestoreStatusBanner } from "@/components/firestore-status-banner";
+import { GoogleIcon } from "@/components/google-icon";
 import { LinkCard } from "@/components/link-card";
 import { StatusToast } from "@/components/status-toast";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { sortLinksByCreatedAtDesc } from "@/lib/firestore-links";
+import { UserAvatar } from "@/components/user-avatar";
+import {
+  getUserLinksPath,
+  sortLinksByCreatedAtDesc,
+} from "@/lib/firestore-links";
 import { DEFAULT_PROFILE, useProfileStore } from "@/lib/store";
 import { useHydrated } from "@/lib/use-hydrated";
 import { cn } from "@/lib/utils";
@@ -26,6 +31,13 @@ export default function PublicProfilePage() {
   const decodedUsername = decodeURIComponent(rawUsername);
 
   const hasMounted = useHydrated();
+  const authStatus = useProfileStore((state) => state.authStatus);
+  const authUser = useProfileStore((state) => state.authUser);
+  const isAuthSubmitting = useProfileStore((state) => state.isAuthSubmitting);
+  const signInWithGoogleAction = useProfileStore(
+    (state) => state.signInWithGoogleAction
+  );
+  const signOutAction = useProfileStore((state) => state.signOutAction);
   const storeProfile = useProfileStore((state) => state.profile);
   const firestoreStatus = useProfileStore((state) => state.firestoreStatus);
   const firestoreError = useProfileStore((state) => state.firestoreError);
@@ -39,12 +51,17 @@ export default function PublicProfilePage() {
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
-  const profile = hasMounted ? storeProfile : DEFAULT_PROFILE;
+  const isAuthenticated =
+    hasMounted && authStatus === "authenticated" && Boolean(authUser);
+  const profile = isAuthenticated ? storeProfile : DEFAULT_PROFILE;
+  const linksPath = getUserLinksPath(isAuthenticated ? authUser?.uid : null);
   const isLoadingLinks =
-    hasMounted && (firestoreStatus === "syncing" || isRefreshingLinks);
+    isAuthenticated && (firestoreStatus === "syncing" || isRefreshingLinks);
 
   const isMatchedUser =
-    decodedUsername.toLowerCase() === profile.username.toLowerCase();
+    isAuthenticated &&
+    (decodedUsername.toLowerCase() === profile.username.toLowerCase() ||
+      decodedUsername === authUser?.uid);
 
   useEffect(() => {
     if (!hasMounted || !isMatchedUser) return;
@@ -91,6 +108,61 @@ export default function PublicProfilePage() {
     showToast("PROFILE LINK COPIED");
   };
 
+  if (!isAuthenticated) {
+    return (
+      <div className="min-h-screen w-full bg-canvas text-ink flex flex-col font-sans">
+        <header className="sticky top-0 z-40 w-full border-b border-hairline bg-canvas/90 backdrop-blur-md">
+          <div className="mx-auto flex min-h-14 max-w-5xl items-center justify-between gap-2 px-4 py-2.5 sm:px-8">
+            <div className="flex items-center gap-2">
+              <Link
+                href="/"
+                className={cn(
+                  buttonVariants({ variant: "outline", size: "xs" }),
+                  NAV_BUTTON_CLASS
+                )}
+              >
+                <ArrowLeft className="size-3.5" strokeWidth={1.5} />
+                <span>마이페이지</span>
+              </Link>
+              <Link
+                href="/links"
+                className={cn(
+                  buttonVariants({ variant: "outline", size: "xs" }),
+                  NAV_BUTTON_CLASS
+                )}
+              >
+                Links
+              </Link>
+            </div>
+
+            <Button
+              type="button"
+              size="xs"
+              variant="default"
+              disabled={isAuthSubmitting || authStatus === "loading"}
+              onClick={() => void signInWithGoogleAction()}
+            >
+              {isAuthSubmitting ? (
+                <Loader2 className="size-3.5 animate-spin" strokeWidth={1.75} />
+              ) : (
+                <GoogleIcon className="size-3.5" />
+              )}
+              <span>Google 로그인</span>
+            </Button>
+          </div>
+        </header>
+
+        <main className="mx-auto w-full max-w-5xl px-4 sm:px-8 py-10 sm:py-20 flex-1">
+          <AuthRequiredView
+            eyebrow="// PROFILE ACCESS · AUTHENTICATION REQUIRED"
+            title="로그인 후 개인화 프로필을 확인할 수 있습니다"
+            description={`@${decodedUsername} 프로필과 개인화된 Firestore 경로(users/{user.uid}/links) 데이터를 확인하려면 Google 계정으로 먼저 로그인해 주세요.`}
+          />
+        </main>
+      </div>
+    );
+  }
+
   if (!isMatchedUser) {
     return (
       <div className="min-h-screen w-full bg-canvas text-ink flex flex-col items-center justify-center px-6">
@@ -102,19 +174,26 @@ export default function PublicProfilePage() {
             @{decodedUsername} 프로필을 찾을 수 없습니다
           </h1>
           <p className="text-sm text-body-mid leading-relaxed">
-            현재 로컬 메모리 상태에 등록된 프로필은{" "}
-            <span className="font-mono text-ink">@{profile.username}</span>입니다.
+            현재 로그인된 계정의 프로필 경로는{" "}
+            <span className="font-mono text-ink">@{profile.username}</span>{" "}
+            ({linksPath})입니다.
           </p>
           <div className="flex flex-col sm:flex-row items-center justify-center gap-2.5 pt-2">
             <Link
               href={`/${profile.username}`}
-              className={cn(buttonVariants({ variant: "default" }), "w-full sm:w-auto")}
+              className={cn(
+                buttonVariants({ variant: "default" }),
+                "w-full sm:w-auto"
+              )}
             >
               Go to @{profile.username}
             </Link>
             <Link
               href="/links"
-              className={cn(buttonVariants({ variant: "outline" }), "w-full sm:w-auto")}
+              className={cn(
+                buttonVariants({ variant: "outline" }),
+                "w-full sm:w-auto"
+              )}
             >
               View All Links
             </Link>
@@ -147,31 +226,45 @@ export default function PublicProfilePage() {
                 NAV_BUTTON_CLASS
               )}
             >
-              Overview
+              마이페이지
             </Link>
           </div>
 
-          <Button
-            type="button"
-            size="xs"
-            variant="outline"
-            onClick={handleCopyPageUrl}
-            aria-label="프로필 링크 복사"
-            className={cn("sm:hidden", NAV_BUTTON_CLASS)}
-          >
-            <Share2 className="size-3.5" strokeWidth={1.5} />
-            <span>Share</span>
-          </Button>
-          <Button
-            type="button"
-            size="icon-sm"
-            variant="outline"
-            onClick={handleCopyPageUrl}
-            aria-label="프로필 링크 복사"
-            className={cn("hidden sm:inline-flex", NAV_BUTTON_CLASS)}
-          >
-            <Share2 className="size-3.5" strokeWidth={1.5} />
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              size="xs"
+              variant="outline"
+              disabled={isAuthSubmitting}
+              onClick={() => void signOutAction()}
+              className={NAV_BUTTON_CLASS}
+            >
+              <LogOut className="size-3" strokeWidth={1.5} />
+              <span>로그아웃</span>
+            </Button>
+
+            <Button
+              type="button"
+              size="xs"
+              variant="outline"
+              onClick={handleCopyPageUrl}
+              aria-label="프로필 링크 복사"
+              className={cn("sm:hidden", NAV_BUTTON_CLASS)}
+            >
+              <Share2 className="size-3.5" strokeWidth={1.5} />
+              <span>Share</span>
+            </Button>
+            <Button
+              type="button"
+              size="icon-sm"
+              variant="outline"
+              onClick={handleCopyPageUrl}
+              aria-label="프로필 링크 복사"
+              className={cn("hidden sm:inline-flex", NAV_BUTTON_CLASS)}
+            >
+              <Share2 className="size-3.5" strokeWidth={1.5} />
+            </Button>
+          </div>
         </div>
       </header>
 
@@ -180,16 +273,12 @@ export default function PublicProfilePage() {
         {/* Profile Summary Card */}
         <Card className="rounded-lg border border-hairline bg-canvas-card p-6 shadow-none">
           <div className="flex flex-col items-center text-center space-y-4">
-            <div className="relative size-20 rounded-full overflow-hidden shrink-0 border border-hairline bg-canvas-soft">
-              <Image
-                src={profile.avatarUrl || "/avatar.png"}
-                alt={`${profile.name} Avatar`}
-                width={80}
-                height={80}
-                className="h-full w-full object-cover"
-                priority
-              />
-            </div>
+            <UserAvatar
+              src={authUser?.photoURL}
+              name={profile.name}
+              size={80}
+              priority
+            />
 
             <div className="space-y-1.5">
               <p className="font-mono text-xs uppercase tracking-[1.4px] text-body-mid">
@@ -198,13 +287,20 @@ export default function PublicProfilePage() {
               <h1 className="text-3xl sm:text-4xl font-normal tracking-[-0.03em] text-ink">
                 {profile.name}
               </h1>
-              <p className="font-mono text-xs text-body-mid">{profile.callsign}</p>
+              <p className="font-mono text-xs text-body-mid">
+                {profile.callsign}
+                {authUser?.email ? ` · ${authUser.email}` : ""}
+              </p>
             </div>
 
             <Badge className="border-hairline bg-canvas-soft px-3 py-1 text-sunset">
               <span className="size-1.5 rounded-full bg-current" />
               <span>{profile.status}</span>
             </Badge>
+
+            <p className="font-mono text-[11px] text-body-mid break-all">
+              {linksPath}
+            </p>
 
             <p className="text-sm sm:text-base font-normal text-body leading-relaxed">
               {profile.headline}
@@ -219,7 +315,10 @@ export default function PublicProfilePage() {
           </span>
           <div className="flex items-center gap-2">
             {isLoadingLinks && (
-              <Loader2 className="size-3.5 animate-spin opacity-75" strokeWidth={1.75} />
+              <Loader2
+                className="size-3.5 animate-spin opacity-75"
+                strokeWidth={1.75}
+              />
             )}
             <span className="font-mono text-xs uppercase tracking-[1.4px] text-body-mid">
               {activeLinks.length} ACTIVE
@@ -230,8 +329,8 @@ export default function PublicProfilePage() {
         <FirestoreStatusBanner
           isLoading={isLoadingLinks}
           error={hasMounted ? firestoreError : null}
-          loadingMessage="링크 목록을 불러오는 중입니다..."
-          onRetry={() => void loadFirestoreLinks()}
+          loadingMessage={`Firestore(${linksPath})에서 링크 목록을 불러오는 중입니다...`}
+          onRetry={() => void loadFirestoreLinks(authUser?.uid)}
           theme="xai"
         />
 
@@ -246,7 +345,7 @@ export default function PublicProfilePage() {
           {activeLinks.length === 0 ? (
             <Card className="rounded-lg border border-hairline bg-canvas-card p-6 shadow-none text-center space-y-4">
               <p className="text-sm sm:text-base font-normal text-body leading-relaxed">
-                현재 공개된 링크가 없습니다.
+                현재 공개된 링크가 없습니다. ({linksPath})
               </p>
               <Link
                 href="/links"
@@ -274,7 +373,7 @@ export default function PublicProfilePage() {
 
       <footer className="py-6 px-4 text-center text-body-mid border-t border-hairline bg-canvas">
         <p className="font-mono text-[11px] uppercase tracking-[1.2px]">
-          {profile.name.toUpperCase()} {"//"} MYLINK PUBLIC PROFILE
+          {profile.name.toUpperCase()} {"//"} {linksPath}
         </p>
       </footer>
 

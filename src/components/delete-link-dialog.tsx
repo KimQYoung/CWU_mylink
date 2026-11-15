@@ -15,9 +15,10 @@ import {
 } from "@/components/ui/dialog";
 import { Separator } from "@/components/ui/separator";
 import {
-  FIRESTORE_LINKS_PATH,
   getFirestoreErrorMessage,
+  getUserLinksPath,
 } from "@/lib/firestore-links";
+import { useProfileStore } from "@/lib/store";
 import type { LinkItem } from "@/types";
 
 interface DeleteLinkDialogProps {
@@ -37,6 +38,8 @@ export function DeleteLinkDialog({
   onOpenChange,
   onConfirmDelete,
 }: DeleteLinkDialogProps) {
+  const authUser = useProfileStore((state) => state.authUser);
+  const linksPath = getUserLinksPath(authUser?.uid);
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
@@ -58,7 +61,7 @@ export function DeleteLinkDialog({
       await onConfirmDelete(link);
       onOpenChange(false);
     } catch (error) {
-      setDeleteError(getFirestoreErrorMessage(error));
+      setDeleteError(getFirestoreErrorMessage(error, linksPath));
     } finally {
       setIsDeleting(false);
     }
@@ -86,8 +89,8 @@ export function DeleteLinkDialog({
           </div>
           <DialogTitle>정말 삭제하시겠습니까?</DialogTitle>
           <DialogDescription>
-            선택한 링크 문서가 Cloud Firestore ({FIRESTORE_LINKS_PATH})에서
-            영구적으로 제거되며 삭제 후 목록이 갱신됩니다.
+            선택한 링크 문서가 Cloud Firestore ({linksPath})에서 영구적으로
+            제거되며 삭제 후 목록이 갱신됩니다.
           </DialogDescription>
         </DialogHeader>
 

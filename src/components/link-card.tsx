@@ -2,7 +2,7 @@
 
 import { ArrowUpRight, Loader2, Pencil, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { Button, buttonVariants } from "@/components/ui/button";
+import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
 import { LinkIcon } from "@/components/link-icon";
@@ -10,7 +10,7 @@ import { LinkInlineEditor } from "@/components/link-inline-editor";
 import { CopyFeedbackContent } from "@/components/status-toast";
 import {
   formatLinkTimestamp,
-  type UpdateAnonymousLinkInput,
+  type UpdateUserLinkInput,
 } from "@/lib/firestore-links";
 import { cn } from "@/lib/utils";
 import type { LinkItem, ThemeId } from "@/types";
@@ -30,7 +30,7 @@ interface LinkCardProps {
   onToggleActive?: (id: string) => void;
   onEditStart?: (link: LinkItem) => void;
   onEditCancel?: () => void;
-  onSaveEdit?: (id: string, input: UpdateAnonymousLinkInput) => Promise<void>;
+  onSaveEdit?: (id: string, input: UpdateUserLinkInput) => Promise<void>;
   onDeleteRequest?: (link: LinkItem) => void;
 }
 
@@ -44,12 +44,12 @@ const PUBLIC_THEME_CARD: Record<
     subUrl: string;
     title: string;
     desc: string;
-    primaryCta: string;
-    outlineCta: string;
+    indicator: string;
+    focusRing: string;
   }
 > = {
   xai: {
-    card: "rounded-lg border border-hairline bg-canvas-card p-4 sm:p-6 shadow-none hover:border-white/25 transition-colors",
+    card: "rounded-lg border border-hairline bg-canvas-card p-4 sm:p-6 shadow-none hover:border-white/35 hover:bg-canvas-soft/60 transition-colors",
     divider: "border-hairline",
     iconBox:
       "size-9 sm:size-10 rounded-lg border border-hairline bg-canvas-soft text-ink flex items-center justify-center shrink-0",
@@ -57,11 +57,11 @@ const PUBLIC_THEME_CARD: Record<
     subUrl: "font-mono text-xs text-body break-all",
     title: "text-lg sm:text-xl font-normal tracking-[-0.02em] text-ink",
     desc: "text-sm font-normal text-body-mid leading-relaxed",
-    primaryCta: "",
-    outlineCta: "",
+    indicator: "text-body-mid group-hover:text-ink",
+    focusRing: "focus-visible:after:ring-2 focus-visible:after:ring-white/40",
   },
   neobrutalism: {
-    card: "rounded-xl border-[3px] border-black bg-white p-4 sm:p-5 text-black shadow-[6px_6px_0px_#000] hover:bg-[#FFFDF5] transition-colors",
+    card: "rounded-xl border-[3px] border-black bg-white p-4 sm:p-5 text-black shadow-[6px_6px_0px_#000] hover:bg-[#FFFDF5] hover:translate-x-[1px] hover:translate-y-[1px] hover:shadow-[4px_4px_0px_#000] transition-all",
     divider: "border-black/15",
     iconBox:
       "size-9 sm:size-10 rounded-lg border-2 border-black bg-[#FFE600] text-black flex items-center justify-center shrink-0",
@@ -69,13 +69,11 @@ const PUBLIC_THEME_CARD: Record<
     subUrl: "font-mono text-xs text-black/75 break-all",
     title: "text-base sm:text-lg font-bold tracking-normal text-black",
     desc: "text-xs sm:text-sm text-black/80 leading-relaxed",
-    primaryCta:
-      "border-2 border-black bg-[#FFE600] text-black font-bold shadow-[3px_3px_0px_#000] hover:bg-[#FFE600] hover:translate-x-[1px] hover:translate-y-[1px] hover:shadow-none",
-    outlineCta:
-      "border-2 border-black bg-[#7BF1A8] text-black font-bold shadow-[3px_3px_0px_#000] hover:bg-[#7BF1A8] hover:border-black hover:translate-x-[1px] hover:translate-y-[1px] hover:shadow-none",
+    indicator: "text-black/70 group-hover:text-black",
+    focusRing: "focus-visible:after:ring-2 focus-visible:after:ring-black",
   },
   modern: {
-    card: "rounded-2xl border border-slate-200/90 bg-white p-4 sm:p-5 text-slate-900 shadow-sm hover:shadow-md hover:border-indigo-200 transition-all",
+    card: "rounded-2xl border border-slate-200/90 bg-white p-4 sm:p-5 text-slate-900 shadow-sm hover:shadow-md hover:border-indigo-300 transition-all",
     divider: "border-slate-100",
     iconBox:
       "size-9 sm:size-10 rounded-xl border border-indigo-100 bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0",
@@ -83,16 +81,14 @@ const PUBLIC_THEME_CARD: Record<
     subUrl: "font-mono text-xs text-slate-500 break-all",
     title: "text-base sm:text-lg font-medium tracking-normal text-slate-900",
     desc: "text-xs sm:text-sm text-slate-500 leading-relaxed",
-    primaryCta:
-      "border-indigo-600 bg-indigo-600 text-white font-medium hover:bg-indigo-700 hover:border-indigo-700",
-    outlineCta:
-      "border-slate-200 bg-slate-50 text-slate-800 font-medium hover:border-indigo-300 hover:bg-indigo-50/50 hover:text-indigo-700",
+    indicator: "text-slate-400 group-hover:text-indigo-600",
+    focusRing: "focus-visible:after:ring-2 focus-visible:after:ring-indigo-400",
   },
 };
 
 /**
  * shadcn/ui Card / Button / Badge / Switch 기반의 재사용 가능한 링크 카드 컴포넌트
- * - 모바일에서는 메타 헤더 / 본문 / 하단 액션 바를 수직 계층으로 배치하여 가독성을 확보합니다.
+ * - 카드 블록 전체를 클릭하면 링크를 실행(새 탭 열기 또는 이메일 복사)하며, 관리 버튼은 독립적으로 동작합니다.
  */
 export function LinkCard({
   link,
@@ -118,6 +114,12 @@ export function LinkCard({
   const isDirectory = mode === "directory";
   const isBusy = isUpdating || isDeleting;
   const hasManagementActions = Boolean(onEditStart || onDeleteRequest);
+  const showManagementFooter =
+    (isDirectory && Boolean(onToggleActive)) || hasManagementActions;
+  const isCopyEmailAction = Boolean(
+    link.isAction && link.actionType === "copy-email"
+  );
+  const hasPrimaryAction = isCopyEmailAction || Boolean(link.url);
   const formattedUpdatedAt = formatLinkTimestamp(link.updatedAt);
   const themeStyles = PUBLIC_THEME_CARD[theme];
 
@@ -140,14 +142,55 @@ export function LinkCard({
     );
   }
 
+  // 카드 전체를 클릭 영역으로 확장(::after)하고 관리 버튼은 z-10으로 분리
+  const primaryTrigger = isCopyEmailAction ? (
+    <button
+      type="button"
+      onClick={() => onCopyEmail?.(link)}
+      aria-label={`${link.title} 이메일 복사`}
+      className={cn(
+        "inline-flex items-center gap-1.5 font-mono text-xs transition-colors focus-visible:outline-none cursor-pointer shrink-0",
+        "after:absolute after:inset-0 after:z-0 after:rounded-[inherit]",
+        themeStyles.focusRing,
+        copied ? "text-emerald-400" : themeStyles.indicator
+      )}
+    >
+      <CopyFeedbackContent
+        copied={copied}
+        defaultLabel={link.buttonText || "Copy Address"}
+        copiedLabel={mode === "public" ? "Copied" : "Copied to Clipboard"}
+      />
+    </button>
+  ) : link.url ? (
+    <a
+      href={link.url}
+      target="_blank"
+      rel="noopener noreferrer"
+      onClick={() => onLinkClick?.(link)}
+      aria-label={`${link.title} 새 탭에서 열기`}
+      className={cn(
+        "inline-flex items-center justify-center transition-colors focus-visible:outline-none shrink-0",
+        "after:absolute after:inset-0 after:z-0 after:rounded-[inherit]",
+        themeStyles.focusRing,
+        themeStyles.indicator
+      )}
+    >
+      <ArrowUpRight
+        className="size-4 transition-transform duration-200 group-hover:translate-x-0.5 group-hover:-translate-y-0.5"
+        strokeWidth={1.5}
+      />
+    </a>
+  ) : null;
+
   return (
     <Card
       className={cn(
         themeStyles.card,
-        "flex flex-col justify-between gap-4",
-        isDirectory || hasManagementActions
-          ? "lg:flex-row lg:items-center lg:gap-6"
-          : "sm:flex-row sm:items-center sm:gap-5",
+        "relative group flex justify-between gap-4",
+        hasPrimaryAction && "cursor-pointer",
+        showManagementFooter
+          ? "flex-col lg:flex-row lg:items-center lg:gap-6"
+          : "flex-row items-center sm:gap-5",
         isDirectory && !link.isActive && "opacity-75 border-dashed"
       )}
     >
@@ -218,135 +261,108 @@ export function LinkCard({
         </div>
       </div>
 
-      {/* Action Footer on Mobile / Inline Right on Desktop */}
-      <div
-        className={cn(
-          "flex flex-col gap-3 pt-3 border-t shrink-0",
-          themeStyles.divider,
-          isDirectory || hasManagementActions
-            ? "sm:flex-row sm:items-center sm:justify-between lg:justify-end lg:border-t-0 lg:pt-0"
-            : "sm:flex-row sm:items-center sm:border-t-0 sm:pt-0"
-        )}
-      >
-        {isDirectory && onToggleActive && (
-          <div className="flex items-center justify-between sm:justify-start gap-2.5">
-            <span className="font-mono text-[11px] uppercase tracking-[1.2px] text-body-mid sm:hidden">
-              PUBLIC VISIBILITY
-            </span>
-            <label
-              className={cn(
-                "inline-flex items-center gap-2 select-none",
-                isBusy ? "cursor-wait" : "cursor-pointer"
-              )}
-            >
-              <Switch
-                checked={link.isActive}
-                disabled={isBusy}
-                onCheckedChange={() => onToggleActive(link.id)}
-                aria-label={`${link.title} 공개 여부 토글`}
-              />
-              <span className="inline-flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-[1.2px] text-body-mid sm:w-20">
-                {isDeleting ? (
-                  <>
-                    <Loader2 className="size-3 animate-spin text-red-400" strokeWidth={1.75} />
-                    <span className="text-red-300">DELETING</span>
-                  </>
-                ) : isUpdating ? (
-                  <>
-                    <Loader2 className="size-3 animate-spin text-amber-400" strokeWidth={1.75} />
-                    <span className="text-amber-300">SAVING</span>
-                  </>
-                ) : link.isActive ? (
-                  "VISIBLE"
-                ) : (
-                  "HIDDEN"
-                )}
-              </span>
-            </label>
-          </div>
-        )}
-
+      {/* 관리 액션(모바일 하단 / 데스크톱 우측) 및 카드 전체 클릭 트리거 */}
+      {showManagementFooter ? (
         <div
           className={cn(
-            "flex flex-col sm:flex-row sm:items-center gap-2",
-            !hasManagementActions && "w-full sm:w-auto"
+            "flex flex-col gap-3 pt-3 border-t shrink-0",
+            themeStyles.divider,
+            "sm:flex-row sm:items-center sm:justify-between lg:justify-end lg:border-t-0 lg:pt-0"
           )}
         >
-          {hasManagementActions && (
-            <div className="flex items-center gap-2 w-full sm:w-auto">
-              {onEditStart && (
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
+          {isDirectory && onToggleActive && (
+            <div
+              onClick={(e) => e.stopPropagation()}
+              className="relative z-10 flex items-center justify-between sm:justify-start gap-2.5"
+            >
+              <span className="font-mono text-[11px] uppercase tracking-[1.2px] text-body-mid sm:hidden">
+                PUBLIC VISIBILITY
+              </span>
+              <label
+                className={cn(
+                  "inline-flex items-center gap-2 select-none",
+                  isBusy ? "cursor-wait" : "cursor-pointer"
+                )}
+              >
+                <Switch
+                  checked={link.isActive}
                   disabled={isBusy}
-                  onClick={() => onEditStart(link)}
-                  aria-label={`${link.title} 수정`}
-                  className="flex-1 sm:flex-none"
-                >
-                  <Pencil className="size-3.5" strokeWidth={1.5} />
-                  <span>수정</span>
-                </Button>
-              )}
-
-              {onDeleteRequest && (
-                <Button
-                  type="button"
-                  variant="destructive"
-                  size="sm"
-                  disabled={isBusy}
-                  aria-busy={isDeleting}
-                  onClick={() => onDeleteRequest(link)}
-                  aria-label={`${link.title} 삭제`}
-                  className={cn(
-                    "flex-1 sm:flex-none",
-                    isDeleting && "disabled:opacity-80"
-                  )}
-                >
+                  onCheckedChange={() => onToggleActive(link.id)}
+                  aria-label={`${link.title} 공개 여부 토글`}
+                />
+                <span className="inline-flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-[1.2px] text-body-mid sm:w-20">
                   {isDeleting ? (
-                    <Loader2 className="size-3.5 animate-spin" strokeWidth={1.5} />
+                    <>
+                      <Loader2 className="size-3 animate-spin text-red-400" strokeWidth={1.75} />
+                      <span className="text-red-300">DELETING</span>
+                    </>
+                  ) : isUpdating ? (
+                    <>
+                      <Loader2 className="size-3 animate-spin text-amber-400" strokeWidth={1.75} />
+                      <span className="text-amber-300">SAVING</span>
+                    </>
+                  ) : link.isActive ? (
+                    "VISIBLE"
                   ) : (
-                    <Trash2 className="size-3.5" strokeWidth={1.5} />
+                    "HIDDEN"
                   )}
-                  <span>삭제</span>
-                </Button>
-              )}
+                </span>
+              </label>
             </div>
           )}
 
-          {link.isAction && link.actionType === "copy-email" ? (
-            <Button
-              type="button"
-              variant="default"
-              onClick={() => onCopyEmail?.(link)}
-              className={cn("w-full sm:w-auto", themeStyles.primaryCta)}
-            >
-              <CopyFeedbackContent
-                copied={copied}
-                defaultLabel={link.buttonText || "Copy Address"}
-                copiedLabel={mode === "public" ? "Copied" : "Copied to Clipboard"}
-              />
-            </Button>
-          ) : (
-            <a
-              href={link.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              onClick={() => onLinkClick?.(link)}
-              className={cn(
-                buttonVariants({ variant: "outline" }),
-                "w-full sm:w-auto",
-                themeStyles.outlineCta
-              )}
-            >
-              <span>
-                {link.buttonText?.replace(/\s*↗$/, "") || "Open Link"}
-              </span>
-              <ArrowUpRight className="size-4" strokeWidth={1.5} />
-            </a>
-          )}
+          <div className="flex items-center justify-between sm:justify-end gap-3">
+            {hasManagementActions && (
+              <div
+                onClick={(e) => e.stopPropagation()}
+                className="relative z-10 flex items-center gap-2 flex-1 sm:flex-initial"
+              >
+                {onEditStart && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={isBusy}
+                    onClick={() => onEditStart(link)}
+                    aria-label={`${link.title} 수정`}
+                    className="flex-1 sm:flex-none"
+                  >
+                    <Pencil className="size-3.5" strokeWidth={1.5} />
+                    <span>수정</span>
+                  </Button>
+                )}
+
+                {onDeleteRequest && (
+                  <Button
+                    type="button"
+                    variant="destructive"
+                    size="sm"
+                    disabled={isBusy}
+                    aria-busy={isDeleting}
+                    onClick={() => onDeleteRequest(link)}
+                    aria-label={`${link.title} 삭제`}
+                    className={cn(
+                      "flex-1 sm:flex-none",
+                      isDeleting && "disabled:opacity-80"
+                    )}
+                  >
+                    {isDeleting ? (
+                      <Loader2 className="size-3.5 animate-spin" strokeWidth={1.5} />
+                    ) : (
+                      <Trash2 className="size-3.5" strokeWidth={1.5} />
+                    )}
+                    <span>삭제</span>
+                  </Button>
+                )}
+              </div>
+            )}
+
+            {primaryTrigger}
+          </div>
         </div>
-      </div>
+      ) : (
+        primaryTrigger
+      )}
     </Card>
   );
 }

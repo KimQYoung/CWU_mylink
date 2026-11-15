@@ -1,12 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import type { UpdateAnonymousLinkInput } from "@/lib/firestore-links";
+import type { UpdateUserLinkInput } from "@/lib/firestore-links";
 import type { LinkItem } from "@/types";
 
 interface UseLinkManagementOptions {
   links: LinkItem[];
-  updateLink: (id: string, input: UpdateAnonymousLinkInput) => Promise<LinkItem>;
+  updateLink: (id: string, input: UpdateUserLinkInput) => Promise<LinkItem>;
   deleteLink: (id: string) => Promise<void>;
   onSuccessToast?: (message: string) => void;
 }
@@ -41,7 +41,7 @@ export function useLinkManagement({
 
   const handleSaveEdit = async (
     id: string,
-    input: UpdateAnonymousLinkInput
+    input: UpdateUserLinkInput
   ) => {
     const target = links.find((item) => item.id === id);
     const updated = await updateLink(id, input);

@@ -10,6 +10,7 @@ import {
   isSupported,
   type Analytics,
 } from "firebase/analytics";
+import { getAuth, GoogleAuthProvider, type Auth } from "firebase/auth";
 import { getFirestore, type Firestore } from "firebase/firestore";
 
 /**
@@ -31,6 +32,7 @@ const app: FirebaseApp =
   getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
 
 let analyticsInstance: Analytics | null = null;
+let authInstance: Auth | null = null;
 let firestoreInstance: Firestore | null = null;
 
 /**
@@ -38,6 +40,33 @@ let firestoreInstance: Firestore | null = null;
  */
 export function isFirebaseConfigured(): boolean {
   return Boolean(firebaseConfig.apiKey && firebaseConfig.projectId);
+}
+
+/**
+ * Firebase Authentication 싱글톤 인스턴스를 반환합니다.
+ * 브라우저 환경이 아니거나 환경 변수가 설정되지 않은 경우 null을 반환합니다.
+ */
+export function getFirebaseAuth(): Auth | null {
+  if (typeof window === "undefined" || !isFirebaseConfigured()) {
+    return null;
+  }
+
+  if (!authInstance) {
+    authInstance = getAuth(app);
+  }
+
+  return authInstance;
+}
+
+/**
+ * Google 소셜 로그인용 AuthProvider 인스턴스를 생성합니다.
+ */
+export function createGoogleAuthProvider(): GoogleAuthProvider {
+  const provider = new GoogleAuthProvider();
+  provider.setCustomParameters({
+    prompt: "select_account",
+  });
+  return provider;
 }
 
 /**

@@ -17,8 +17,8 @@ import {
 } from "@/components/ui/dialog";
 import { Separator } from "@/components/ui/separator";
 import {
-  FIRESTORE_LINKS_PATH,
   getFirestoreErrorMessage,
+  getUserLinksPath,
 } from "@/lib/firestore-links";
 import {
   createAddLinkSchema,
@@ -54,8 +54,10 @@ export function AddLinkDialog({
   onOpenChange,
   onAdded,
 }: AddLinkDialogProps) {
+  const authUser = useProfileStore((state) => state.authUser);
   const links = useProfileStore((state) => state.profile.links);
   const addLink = useProfileStore((state) => state.addLink);
+  const linksPath = getUserLinksPath(authUser?.uid);
 
   const [hasManualIcon, setHasManualIcon] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -119,7 +121,7 @@ export function AddLinkDialog({
       setHasManualIcon(false);
       onOpenChange(false);
     } catch (error) {
-      setSubmitError(getFirestoreErrorMessage(error));
+      setSubmitError(getFirestoreErrorMessage(error, linksPath));
     }
   };
 
@@ -140,8 +142,8 @@ export function AddLinkDialog({
           </div>
           <DialogTitle>새 링크 추가</DialogTitle>
           <DialogDescription>
-            등록한 링크는 Cloud Firestore ({FIRESTORE_LINKS_PATH})에 저장되며
-            저장 후 목록이 갱신됩니다.
+            등록한 링크는 Cloud Firestore ({linksPath})에 저장되며 저장 후
+            목록이 갱신됩니다.
           </DialogDescription>
         </DialogHeader>
 

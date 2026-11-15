@@ -51,7 +51,7 @@ const BANNER_THEME_STYLES: Record<
 export function FirestoreStatusBanner({
   isLoading,
   error,
-  loadingMessage = "Firestore(users/anonymous/links)에서 링크 목록을 불러오는 중입니다...",
+  loadingMessage = "Firestore(users/{user.uid}/links)에서 링크 목록을 불러오는 중입니다...",
   onRetry,
   theme = "xai",
   className,
