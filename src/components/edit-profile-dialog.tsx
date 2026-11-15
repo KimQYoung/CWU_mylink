@@ -26,21 +26,24 @@ import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
 import { UserAvatar } from "@/components/user-avatar";
 import {
-  checkDisplayNameAvailability,
-  DuplicateDisplayNameError,
   getProfileFirestoreErrorMessage,
   getUserProfilePath,
   type FirestoreUserProfile,
 } from "@/lib/firestore-profile";
 import {
+  useCheckDisplayNameMutation,
+  useResolvedUserProfile,
+  useSaveProfileMutation,
+} from "@/lib/queries/user-data";
+import {
   hasProfileFormChanges,
   normalizeDisplayNameKey,
+  parseProfileAvatarUrl,
   PROFILE_FIELD_LIMITS,
   profileFormSchema,
   sanitizeDisplayName,
   type ProfileFormValues,
 } from "@/lib/schemas/profile";
-import { useProfileStore } from "@/lib/store";
 import { cn } from "@/lib/utils";
 
 type DuplicateCheckStatus =
@@ -67,22 +70,25 @@ interface EditProfileDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSaved?: (profile: FirestoreUserProfile) => void;
+  onSaveRollback?: (errorMessage: string) => void;
 }
 
 /**
  * 마이페이지 프로필 수정 모달
  * - Display Name 수정 및 Firestore 기반 실시간 중복 확인을 지원합니다.
- * - 한 줄 소개(Bio) 및 프로필 이미지 URL 수정을 제공합니다.
+ * - 저장 시 TanStack Query 낙관적 업데이트를 즉시 적용하고, 실패 시 이전 상태로 자동 롤백합니다.
  */
 export function EditProfileDialog({
   open,
   onOpenChange,
   onSaved,
+  onSaveRollback,
 }: EditProfileDialogProps) {
-  const authUser = useProfileStore((state) => state.authUser);
-  const profile = useProfileStore((state) => state.profile);
-  const customProfile = useProfileStore((state) => state.customProfile);
-  const saveProfile = useProfileStore((state) => state.saveProfile);
+  const { authUser, profile, customProfile } = useResolvedUserProfile();
+  const checkDisplayNameMutation = useCheckDisplayNameMutation();
+  const saveProfileMutation = useSaveProfileMutation({
+    onRollback: onSaveRollback,
+  });
 
   const profilePath = getUserProfilePath(authUser?.uid);
 
@@ -181,10 +187,10 @@ export function EditProfileDialog({
     });
 
     try {
-      const result = await checkDisplayNameAvailability(
-        rawDisplayName,
-        authUser.uid
-      );
+      const result = await checkDisplayNameMutation.mutateAsync({
+        displayName: rawDisplayName,
+        uid: authUser.uid,
+      });
       if (normalizeDisplayNameKey(getValues("displayName")) !== targetKey) {
         return;
       }
@@ -239,7 +245,7 @@ export function EditProfileDialog({
     }
   };
 
-  const onValidSubmit = async (values: ProfileFormValues) => {
+  const onValidSubmit = (values: ProfileFormValues) => {
     if (!authUser?.uid) return;
 
     if (!hasProfileFormChanges(values, formValues)) {
@@ -260,37 +266,37 @@ export function EditProfileDialog({
 
     setSubmitError(null);
 
-    try {
-      const saved = await saveProfile({
-        displayName: values.displayName,
-        bio: values.bio,
-        avatarUrl: values.avatarUrl,
-      });
+    const cleanedDisplayName = sanitizeDisplayName(values.displayName);
+    const cleanedBio = values.bio.trim();
+    const parsedAvatar = parseProfileAvatarUrl(values.avatarUrl);
+    const cleanedAvatarUrl = parsedAvatar.valid
+      ? parsedAvatar.url
+      : values.avatarUrl.trim();
 
-      reset({
-        displayName: saved.displayName,
-        bio: saved.bio,
-        avatarUrl: saved.avatarUrl || authUser?.photoURL || "/avatar.png",
-      });
-      setDuplicateCheck(INITIAL_CHECK_STATE);
-      onSaved?.(saved);
-      onOpenChange(false);
-    } catch (error) {
-      if (error instanceof DuplicateDisplayNameError) {
-        setDuplicateCheck({
-          status: "taken",
-          checkedKey: submittedKey,
-          message: error.message,
-        });
-        setError("displayName", {
-          type: "duplicate",
-          message: error.message,
-        });
-        return;
-      }
+    const optimisticProfile: FirestoreUserProfile = {
+      displayName: cleanedDisplayName,
+      normalizedDisplayName: submittedKey,
+      bio: cleanedBio,
+      avatarUrl: cleanedAvatarUrl,
+      ...(authUser.email ? { email: authUser.email } : {}),
+    };
 
-      setSubmitError(getProfileFirestoreErrorMessage(error, profilePath));
-    }
+    // 낙관적 업데이트를 즉시 트리거하고 다이얼로그를 닫아 지연 없는 UI 반영을 제공합니다.
+    saveProfileMutation.mutate({
+      displayName: cleanedDisplayName,
+      bio: cleanedBio,
+      avatarUrl: cleanedAvatarUrl,
+    });
+
+    reset({
+      displayName: optimisticProfile.displayName,
+      bio: optimisticProfile.bio,
+      avatarUrl:
+        optimisticProfile.avatarUrl || authUser?.photoURL || "/avatar.png",
+    });
+    setDuplicateCheck(INITIAL_CHECK_STATE);
+    onSaved?.(optimisticProfile);
+    onOpenChange(false);
   };
 
   const showDuplicateStatusBanner =

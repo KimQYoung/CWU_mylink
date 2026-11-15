@@ -19,6 +19,7 @@ import { Button } from "@/components/ui/button";
 import { UserAvatar } from "@/components/user-avatar";
 import { getDisplayNameFromAuthUser } from "@/lib/firebase-auth";
 import { getUserLinksPath } from "@/lib/firestore-links";
+import { useResolvedUserProfile } from "@/lib/queries/user-data";
 import { useProfileStore } from "@/lib/store";
 import { cn } from "@/lib/utils";
 
@@ -34,18 +35,18 @@ const MENU_ITEM_CLASS =
  * - 계정 정보(Display Name, 전체 이메일, UID 복사), 개인화 Firestore 경로·링크 통계, 빠른 이동·액션, 세션 제어를 제공합니다.
  */
 export function ProfileDropdown({ onToast }: ProfileDropdownProps) {
-  const authUser = useProfileStore((state) => state.authUser);
   const isAuthSubmitting = useProfileStore((state) => state.isAuthSubmitting);
-  const profile = useProfileStore((state) => state.profile);
-  const firestoreStatus = useProfileStore((state) => state.firestoreStatus);
-  const isRefreshingLinks = useProfileStore((state) => state.isRefreshingLinks);
-  const loadFirestoreLinks = useProfileStore(
-    (state) => state.loadFirestoreLinks
-  );
   const signInWithGoogleAction = useProfileStore(
     (state) => state.signInWithGoogleAction
   );
   const signOutAction = useProfileStore((state) => state.signOutAction);
+  const {
+    authUser,
+    profile,
+    firestoreStatus,
+    isLoadingLinks: isSyncing,
+    refetchLinks,
+  } = useResolvedUserProfile();
 
   const [copiedKey, setCopiedKey] = useState<"uid" | "publicUrl" | null>(null);
 
@@ -67,7 +68,6 @@ export function ProfileDropdown({ onToast }: ProfileDropdownProps) {
     0
   );
 
-  const isSyncing = firestoreStatus === "syncing" || isRefreshingLinks;
   const statusDotClass =
     firestoreStatus === "error"
       ? "bg-red-400"
@@ -274,7 +274,7 @@ export function ProfileDropdown({ onToast }: ProfileDropdownProps) {
 
               <Menu.Item
                 disabled={isSyncing}
-                onClick={() => void loadFirestoreLinks(authUser.uid)}
+                onClick={() => void refetchLinks()}
                 className={MENU_ITEM_CLASS}
               >
                 <span className="inline-flex items-center gap-2">

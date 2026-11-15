@@ -28,7 +28,11 @@ import {
   getUserLinksPath,
   sortLinksByCreatedAtDesc,
 } from "@/lib/firestore-links";
-import { DEFAULT_PROFILE, useProfileStore } from "@/lib/store";
+import {
+  useLinkActions,
+  useResolvedUserProfile,
+} from "@/lib/queries/user-data";
+import { DEFAULT_PROFILE } from "@/lib/store";
 import { useHydrated } from "@/lib/use-hydrated";
 import { useLinkManagement } from "@/lib/use-link-management";
 import { cn } from "@/lib/utils";
@@ -39,20 +43,17 @@ type SortMode = "latest" | "clicks";
 
 export default function LinksPage() {
   const hasMounted = useHydrated();
-  const authStatus = useProfileStore((state) => state.authStatus);
-  const authUser = useProfileStore((state) => state.authUser);
-  const storeProfile = useProfileStore((state) => state.profile);
-  const firestoreStatus = useProfileStore((state) => state.firestoreStatus);
-  const firestoreError = useProfileStore((state) => state.firestoreError);
-  const isRefreshingLinks = useProfileStore((state) => state.isRefreshingLinks);
-  const updatingLinkIds = useProfileStore((state) => state.updatingLinkIds);
-  const loadFirestoreLinks = useProfileStore(
-    (state) => state.loadFirestoreLinks
-  );
-  const toggleLink = useProfileStore((state) => state.toggleLink);
-  const updateLink = useProfileStore((state) => state.updateLink);
-  const deleteLink = useProfileStore((state) => state.deleteLink);
-  const recordLinkClick = useProfileStore((state) => state.recordLinkClick);
+  const {
+    authStatus,
+    authUser,
+    profile: storeProfile,
+    firestoreError,
+    isLoadingLinks: isQueryLoadingLinks,
+    updatingLinkIds,
+    refetchLinks,
+  } = useResolvedUserProfile();
+  const { toggleLink, updateLink, deleteLink, recordLinkClick } =
+    useLinkActions();
 
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
@@ -65,8 +66,7 @@ export default function LinksPage() {
     hasMounted && authStatus === "authenticated" && Boolean(authUser);
   const profile = isAuthenticated ? storeProfile : DEFAULT_PROFILE;
   const linksPath = getUserLinksPath(isAuthenticated ? authUser?.uid : null);
-  const isLoadingLinks =
-    isAuthenticated && (firestoreStatus === "syncing" || isRefreshingLinks);
+  const isLoadingLinks = isAuthenticated && isQueryLoadingLinks;
 
   const showToast = (message: string) => {
     setToastMessage(message);
@@ -364,7 +364,7 @@ export default function LinksPage() {
                     variant="outline"
                     size="xs"
                     disabled={isLoadingLinks}
-                    onClick={() => void loadFirestoreLinks(authUser?.uid)}
+                    onClick={() => void refetchLinks()}
                     className="font-mono text-[10px] uppercase tracking-[1px]"
                   >
                     <RefreshCw
@@ -383,7 +383,7 @@ export default function LinksPage() {
                 isLoading={isLoadingLinks}
                 error={hasMounted ? firestoreError : null}
                 loadingMessage={`Firestore(${linksPath})에서 최신 링크 목록을 불러오는 중입니다...`}
-                onRetry={() => void loadFirestoreLinks(authUser?.uid)}
+                onRetry={() => void refetchLinks()}
               />
 
               {orderedLinks.length === 0 && !isLoadingLinks ? (
@@ -473,7 +473,7 @@ export default function LinksPage() {
                 variant="ghost"
                 size="sm"
                 disabled={isLoadingLinks}
-                onClick={() => void loadFirestoreLinks(authUser?.uid)}
+                onClick={() => void refetchLinks()}
                 className="font-mono text-[11px] uppercase tracking-[1.2px] w-full sm:w-auto"
               >
                 <RefreshCw

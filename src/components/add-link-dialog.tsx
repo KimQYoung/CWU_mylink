@@ -26,7 +26,10 @@ import {
   parseAndNormalizeLinkUrl,
   type LinkFormValues,
 } from "@/lib/schemas/link";
-import { useProfileStore } from "@/lib/store";
+import {
+  useAddLinkMutation,
+  useResolvedUserProfile,
+} from "@/lib/queries/user-data";
 
 const DEFAULT_FORM_VALUES: LinkFormValues = {
   title: "",
@@ -54,9 +57,8 @@ export function AddLinkDialog({
   onOpenChange,
   onAdded,
 }: AddLinkDialogProps) {
-  const authUser = useProfileStore((state) => state.authUser);
-  const links = useProfileStore((state) => state.profile.links);
-  const addLink = useProfileStore((state) => state.addLink);
+  const { authUser, links } = useResolvedUserProfile();
+  const addLinkMutation = useAddLinkMutation();
   const linksPath = getUserLinksPath(authUser?.uid);
 
   const [hasManualIcon, setHasManualIcon] = useState(false);
@@ -99,7 +101,7 @@ export function AddLinkDialog({
     setSubmitError(null);
 
     try {
-      const created = await addLink({
+      const { created } = await addLinkMutation.mutateAsync({
         title: values.title,
         url: parsedUrl.url,
         displayUrl: parsedUrl.displayUrl,

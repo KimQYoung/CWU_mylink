@@ -16,6 +16,10 @@ import {
   getUserLinksPath,
   sortLinksByCreatedAtDesc,
 } from "@/lib/firestore-links";
+import {
+  useLinkActions,
+  useResolvedUserProfile,
+} from "@/lib/queries/user-data";
 import { DEFAULT_PROFILE, useProfileStore } from "@/lib/store";
 import { useHydrated } from "@/lib/use-hydrated";
 import { cn } from "@/lib/utils";
@@ -27,17 +31,16 @@ export default function PublicProfilePage() {
   const decodedUsername = decodeURIComponent(rawUsername);
 
   const hasMounted = useHydrated();
-  const authStatus = useProfileStore((state) => state.authStatus);
-  const authUser = useProfileStore((state) => state.authUser);
-  const storeProfile = useProfileStore((state) => state.profile);
-  const firestoreStatus = useProfileStore((state) => state.firestoreStatus);
-  const firestoreError = useProfileStore((state) => state.firestoreError);
-  const isRefreshingLinks = useProfileStore((state) => state.isRefreshingLinks);
-  const loadFirestoreLinks = useProfileStore(
-    (state) => state.loadFirestoreLinks
-  );
+  const {
+    authStatus,
+    authUser,
+    profile: storeProfile,
+    firestoreError,
+    isLoadingLinks: isQueryLoadingLinks,
+    refetchLinks,
+  } = useResolvedUserProfile();
+  const { recordLinkClick } = useLinkActions();
   const recordPageView = useProfileStore((state) => state.recordPageView);
-  const recordLinkClick = useProfileStore((state) => state.recordLinkClick);
 
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
@@ -46,8 +49,7 @@ export default function PublicProfilePage() {
     hasMounted && authStatus === "authenticated" && Boolean(authUser);
   const profile = isAuthenticated ? storeProfile : DEFAULT_PROFILE;
   const linksPath = getUserLinksPath(isAuthenticated ? authUser?.uid : null);
-  const isLoadingLinks =
-    isAuthenticated && (firestoreStatus === "syncing" || isRefreshingLinks);
+  const isLoadingLinks = isAuthenticated && isQueryLoadingLinks;
 
   const isMatchedUser =
     isAuthenticated &&
@@ -216,7 +218,7 @@ export default function PublicProfilePage() {
           isLoading={isLoadingLinks}
           error={hasMounted ? firestoreError : null}
           loadingMessage={`Firestore(${linksPath})에서 링크 목록을 불러오는 중입니다...`}
-          onRetry={() => void loadFirestoreLinks(authUser?.uid)}
+          onRetry={() => void refetchLinks()}
           theme="xai"
         />
 

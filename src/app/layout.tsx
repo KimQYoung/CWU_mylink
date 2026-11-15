@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { FirebaseAnalytics } from "@/components/firebase-analytics";
 import { FirestoreLinksSync } from "@/components/firestore-links-sync";
+import { QueryProvider } from "@/components/query-provider";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -26,9 +27,11 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       className={`${geistSans.variable} ${geistMono.variable} dark h-full antialiased`}
     >
       <body className="min-h-full flex flex-col bg-canvas text-ink">
-        <FirebaseAnalytics />
-        <FirestoreLinksSync />
-        {children}
+        <QueryProvider>
+          <FirebaseAnalytics />
+          <FirestoreLinksSync />
+          {children}
+        </QueryProvider>
       </body>
     </html>
   );

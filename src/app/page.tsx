@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Pencil, Plus } from "lucide-react";
+import { Loader2, Pencil, Plus } from "lucide-react";
 import {
   AddLinkDialog,
   type AddedLinkSummary,
@@ -20,7 +20,11 @@ import {
   getUserLinksPath,
   sortLinksByCreatedAtDesc,
 } from "@/lib/firestore-links";
-import { DEFAULT_PROFILE, useProfileStore } from "@/lib/store";
+import {
+  useLinkActions,
+  useResolvedUserProfile,
+} from "@/lib/queries/user-data";
+import { DEFAULT_PROFILE } from "@/lib/store";
 import { useHydrated } from "@/lib/use-hydrated";
 import { useLinkManagement } from "@/lib/use-link-management";
 import { cn } from "@/lib/utils";
@@ -33,26 +37,26 @@ export default function Home() {
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [isEditProfileDialogOpen, setIsEditProfileDialogOpen] = useState(false);
 
-  const authStatus = useProfileStore((state) => state.authStatus);
-  const authUser = useProfileStore((state) => state.authUser);
-  const storeProfile = useProfileStore((state) => state.profile);
-  const firestoreStatus = useProfileStore((state) => state.firestoreStatus);
-  const firestoreError = useProfileStore((state) => state.firestoreError);
-  const isRefreshingLinks = useProfileStore((state) => state.isRefreshingLinks);
-  const updatingLinkIds = useProfileStore((state) => state.updatingLinkIds);
-  const loadFirestoreLinks = useProfileStore(
-    (state) => state.loadFirestoreLinks
-  );
-  const updateLink = useProfileStore((state) => state.updateLink);
-  const deleteLink = useProfileStore((state) => state.deleteLink);
-  const recordLinkClick = useProfileStore((state) => state.recordLinkClick);
+  const {
+    authStatus,
+    authUser,
+    profile: storeProfile,
+    firestoreError,
+    isLoadingLinks: isQueryLoadingLinks,
+    isSavingProfile,
+    profileError,
+    updatingLinkIds,
+    refetchLinks,
+    refetchProfile,
+    clearProfileError,
+  } = useResolvedUserProfile();
+  const { updateLink, deleteLink, recordLinkClick } = useLinkActions();
 
   const isAuthenticated =
     hasMounted && authStatus === "authenticated" && Boolean(authUser);
   const profile = isAuthenticated ? storeProfile : DEFAULT_PROFILE;
   const linksPath = getUserLinksPath(isAuthenticated ? authUser?.uid : null);
-  const isLoadingLinks =
-    isAuthenticated && (firestoreStatus === "syncing" || isRefreshingLinks);
+  const isLoadingLinks = isAuthenticated && isQueryLoadingLinks;
 
   const showToast = (message: string) => {
     setToastMessage(message);
@@ -145,11 +149,17 @@ export default function Home() {
                 type="button"
                 variant="outline"
                 size="sm"
+                disabled={isSavingProfile}
+                aria-busy={isSavingProfile}
                 onClick={() => setIsEditProfileDialogOpen(true)}
                 className="mt-1"
               >
-                <Pencil className="size-3.5" strokeWidth={1.5} />
-                <span>프로필 수정</span>
+                {isSavingProfile ? (
+                  <Loader2 className="size-3.5 animate-spin" strokeWidth={1.5} />
+                ) : (
+                  <Pencil className="size-3.5" strokeWidth={1.5} />
+                )}
+                <span>{isSavingProfile ? "프로필 저장 중..." : "프로필 수정"}</span>
               </Button>
             </section>
 
@@ -165,12 +175,22 @@ export default function Home() {
               <span>새로운 링크 추가하기</span>
             </Button>
 
+            {/* 프로필 저장 오류/롤백 배너 */}
+            <FirestoreStatusBanner
+              isLoading={false}
+              error={hasMounted ? profileError : null}
+              onRetry={() => {
+                clearProfileError();
+                void refetchProfile();
+              }}
+            />
+
             {/* 로딩/오류 시에만 표시되는 상태 배너 */}
             <FirestoreStatusBanner
               isLoading={isLoadingLinks}
               error={hasMounted ? firestoreError : null}
               loadingMessage={`Firestore(${linksPath})에서 링크 목록을 불러오는 중입니다...`}
-              onRetry={() => void loadFirestoreLinks(authUser?.uid)}
+              onRetry={() => void refetchLinks()}
             />
 
             {/* 개인화 링크 목록 */}
@@ -231,6 +251,9 @@ export default function Home() {
             onOpenChange={setIsEditProfileDialogOpen}
             onSaved={(updated) =>
               showToast(`PROFILE UPDATED: ${updated.displayName}`)
+            }
+            onSaveRollback={(errorMessage) =>
+              showToast(`PROFILE ROLLBACK: ${errorMessage}`)
             }
           />
 
