@@ -10,6 +10,7 @@ import { AuthRequiredView } from "@/components/auth-required-view";
 import { DeleteLinkDialog } from "@/components/delete-link-dialog";
 import { EditProfileDialog } from "@/components/edit-profile-dialog";
 import { FirestoreStatusBanner } from "@/components/firestore-status-banner";
+import { LandingView } from "@/components/landing-view";
 import { LinkCard } from "@/components/link-card";
 import { SiteHeader } from "@/components/site-header";
 import { StatusToast } from "@/components/status-toast";
@@ -52,6 +53,7 @@ export default function Home() {
   } = useResolvedUserProfile();
   const { updateLink, deleteLink, recordLinkClick } = useLinkActions();
 
+  const isCheckingAuth = !hasMounted || authStatus === "loading";
   const isAuthenticated =
     hasMounted && authStatus === "authenticated" && Boolean(authUser);
   const profile = isAuthenticated ? storeProfile : DEFAULT_PROFILE;
@@ -111,8 +113,10 @@ export default function Home() {
       <SiteHeader onToast={showToast} />
 
       <main className="mx-auto w-full max-w-5xl px-4 sm:px-8 flex-1 flex flex-col">
-        {!isAuthenticated ? (
+        {isCheckingAuth ? (
           <AuthRequiredView />
+        ) : !isAuthenticated ? (
+          <LandingView onToast={showToast} />
         ) : (
           <div className="mx-auto w-full max-w-md py-10 sm:py-16 flex flex-col space-y-7">
             {/* 중앙 정렬 사용자 프로필 헤더 */}
@@ -239,7 +243,7 @@ export default function Home() {
         )}
       </main>
 
-      <footer className="py-8 px-4 text-center">
+      <footer className="border-t border-hairline py-8 px-4 sm:px-8 text-center">
         <p className="font-mono text-xs text-body-mid">
           © {new Date().getFullYear()} MyLink. All rights reserved.
         </p>
