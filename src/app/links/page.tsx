@@ -28,6 +28,7 @@ import {
   getUserLinksPath,
   sortLinksByCreatedAtDesc,
 } from "@/lib/firestore-links";
+import { buildPublicProfileHref } from "@/lib/firestore-profile";
 import {
   useLinkActions,
   useResolvedUserProfile,
@@ -159,14 +160,15 @@ export default function LinksPage() {
     }
   };
 
+  const publicPageHref = buildPublicProfileHref(profile.name);
+
   const handleCopyPublicUrl = () => {
-    const publicPath = `/${profile.username}`;
     const fullUrl =
       typeof window !== "undefined"
-        ? `${window.location.origin}${publicPath}`
-        : publicPath;
+        ? `${window.location.origin}${publicPageHref}`
+        : publicPageHref;
     navigator.clipboard.writeText(fullUrl);
-    showToast(`PUBLIC URL COPIED: ${publicPath}`);
+    showToast(`PUBLIC URL COPIED: /${profile.name}`);
   };
 
   const clearFilters = () => {
@@ -218,7 +220,7 @@ export default function LinksPage() {
 
                 <div className="grid grid-cols-1 min-[380px]:grid-cols-2 sm:flex items-center gap-2.5 shrink-0 w-full md:w-auto">
                   <Link
-                    href={`/${profile.username}`}
+                    href={publicPageHref}
                     className={cn(
                       buttonVariants({ variant: "outline", size: "default" }),
                       "w-full sm:w-auto"

@@ -7,6 +7,7 @@ import {
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
+import { isFirebaseConfigured } from "@/lib/firebase";
 import {
   createUserLink,
   deleteUserLink,
@@ -21,12 +22,15 @@ import {
 } from "@/lib/firestore-links";
 import {
   checkDisplayNameAvailability,
+  DisplayNamePermissionError,
   fetchUserProfile,
+  findUserByDisplayName,
   getProfileFirestoreErrorMessage,
   getUserProfilePath,
   saveUserProfile,
   type DisplayNameCheckResult,
   type FirestoreUserProfile,
+  type ResolvedPublicUser,
   type SaveUserProfileInput,
 } from "@/lib/firestore-profile";
 import {
@@ -45,6 +49,8 @@ export const userQueryKeys = {
   all: ["user"] as const,
   links: (uid: string) => ["user", uid, "links"] as const,
   profile: (uid: string) => ["user", uid, "profile"] as const,
+  publicUserByDisplayName: (normalizedKey: string, authScope: string) =>
+    ["public-user", "displayName", normalizedKey, authScope] as const,
   linkMutations: ["user-link-mutation"] as const,
   profileMutations: ["user-profile-mutation"] as const,
 };
@@ -90,6 +96,23 @@ export function useUserProfileQuery(uid?: string | null) {
       : ["user", "guest", "profile"],
     queryFn: () => fetchUserProfile(normalizedUid),
     enabled: Boolean(normalizedUid),
+  });
+}
+
+/**
+ * Display Name으로 Firestore에서 공개 프로필 사용자(`uid` + 프로필)를 검색하는 쿼리 훅
+ */
+export function usePublicUserByDisplayNameQuery(
+  displayName?: string | null,
+  authScope: string = "guest"
+) {
+  const normalizedKey = normalizeDisplayNameKey(displayName ?? "");
+  return useQuery<ResolvedPublicUser | null>({
+    queryKey: userQueryKeys.publicUserByDisplayName(normalizedKey, authScope),
+    queryFn: () => findUserByDisplayName(displayName ?? ""),
+    enabled: Boolean(normalizedKey) && isFirebaseConfigured(),
+    retry: (failureCount, error) =>
+      !(error instanceof DisplayNamePermissionError) && failureCount < 1,
   });
 }
 
@@ -452,6 +475,11 @@ export function useToggleLinkMutation() {
   });
 }
 
+interface RecordLinkClickInput {
+  linkId: string;
+  targetUid?: string | null;
+}
+
 /**
  * 링크 클릭 시 캐시 카운터를 즉시 증가시키고 Firestore 클릭 수를 원자적으로 +1 합니다.
  */
@@ -459,14 +487,16 @@ export function useRecordLinkClickMutation() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    onMutate: (linkId: string) => {
-      const uid = useProfileStore.getState().authUser?.uid;
-      if (!uid) return { uid: null, hasTarget: false };
+    onMutate: ({ linkId, targetUid }: RecordLinkClickInput) => {
+      const uid =
+        targetUid?.trim() || useProfileStore.getState().authUser?.uid || null;
+      if (!uid) return { uid: null, hasTarget: false, isOwnUser: false };
 
+      const isOwnUser = uid === useProfileStore.getState().authUser?.uid;
       const cachedLinks =
         queryClient.getQueryData<LinkItem[]>(userQueryKeys.links(uid)) ?? [];
       const hasTarget = cachedLinks.some((link) => link.id === linkId);
-      if (!hasTarget) return { uid, hasTarget: false };
+      if (!hasTarget) return { uid, hasTarget: false, isOwnUser };
 
       queryClient.setQueryData<LinkItem[]>(
         userQueryKeys.links(uid),
@@ -479,20 +509,26 @@ export function useRecordLinkClickMutation() {
             )
           )
       );
-      useProfileStore.getState().recordClickAnalytics();
+      if (isOwnUser) {
+        useProfileStore.getState().recordClickAnalytics();
+      }
 
-      return { uid, hasTarget: true };
+      return { uid, hasTarget: true, isOwnUser };
     },
-    mutationFn: async (linkId: string) => {
-      const uid = useProfileStore.getState().authUser?.uid;
+    mutationFn: async ({ linkId, targetUid }: RecordLinkClickInput) => {
+      const uid =
+        targetUid?.trim() || useProfileStore.getState().authUser?.uid || null;
       if (!uid) return;
       const cachedLinks =
         queryClient.getQueryData<LinkItem[]>(userQueryKeys.links(uid)) ?? [];
       if (!cachedLinks.some((link) => link.id === linkId)) return;
       await incrementUserLinkClicks(uid, linkId);
     },
-    onError: (error) => {
-      const uid = useProfileStore.getState().authUser?.uid;
+    onError: (error, _variables, context) => {
+      if (!context?.isOwnUser) {
+        return;
+      }
+      const uid = context.uid ?? useProfileStore.getState().authUser?.uid;
       useProfileStore
         .getState()
         .setFirestoreMutationError(
@@ -527,8 +563,8 @@ export function useLinkActions() {
       if (updatingIds.includes(id)) return;
       toggleMutation.mutate(id);
     },
-    recordLinkClick: (linkId: string) => {
-      clickMutation.mutate(linkId);
+    recordLinkClick: (linkId: string, targetUid?: string | null) => {
+      clickMutation.mutate({ linkId, targetUid });
     },
   };
 }
@@ -623,6 +659,9 @@ export function useSaveProfileMutation(
       queryClient.setQueryData(userQueryKeys.profile(context.uid), saved);
       useProfileStore.getState().setAuthDisplayName(saved.displayName);
       useProfileStore.getState().setProfileMutationError(null);
+      void queryClient.invalidateQueries({
+        queryKey: ["public-user", "displayName"],
+      });
     },
     onError: (error, _variables, context) => {
       if (context) {

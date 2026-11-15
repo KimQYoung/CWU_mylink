@@ -10,6 +10,7 @@ import {
   runTransaction,
   serverTimestamp,
   where,
+  type DocumentData,
   type Firestore,
 } from "firebase/firestore";
 import { getFirebaseAuth, getFirestoreDb } from "@/lib/firebase";
@@ -29,6 +30,11 @@ export interface FirestoreUserProfile {
   avatarUrl: string;
   email?: string;
   updatedAt?: number;
+}
+
+export interface ResolvedPublicUser {
+  uid: string;
+  profile: FirestoreUserProfile;
 }
 
 export interface SaveUserProfileInput {
@@ -71,6 +77,14 @@ export function getUserProfilePath(uid?: string | null): string {
   return normalizedUid
     ? `users/${normalizedUid}`
     : DEFAULT_USER_PROFILE_PATH;
+}
+
+/**
+ * Display Name으로부터 개인 공개 페이지 경로(`/[displayName]`)를 생성합니다.
+ */
+export function buildPublicProfileHref(displayName: string): string {
+  const cleaned = sanitizeDisplayName(displayName);
+  return cleaned ? `/${encodeURIComponent(cleaned)}` : "/";
 }
 
 /**
@@ -136,21 +150,7 @@ async function findOtherUserWithDisplayName(
   return snapshot.docs.some((docSnap) => docSnap.id !== currentUid);
 }
 
-/**
- * Firestore `users/{uid}` 문서에서 사용자의 저장된 프로필 정보를 조회합니다.
- */
-export async function fetchUserProfile(
-  uid: string
-): Promise<FirestoreUserProfile | null> {
-  const db = requireFirestoreDb();
-  const normalizedUid = requireUserId(uid);
-  const userSnap = await getDoc(doc(db, "users", normalizedUid));
-
-  if (!userSnap.exists()) {
-    return null;
-  }
-
-  const data = userSnap.data();
+function mapUserDataToProfile(data: DocumentData): FirestoreUserProfile {
   const displayName =
     typeof data.displayName === "string"
       ? sanitizeDisplayName(data.displayName)
@@ -174,6 +174,132 @@ export async function fetchUserProfile(
     ...(email ? { email } : {}),
     ...(updatedAt > 0 ? { updatedAt } : {}),
   };
+}
+
+/**
+ * Firestore `users/{uid}` 문서에서 사용자의 저장된 프로필 정보를 조회합니다.
+ */
+export async function fetchUserProfile(
+  uid: string
+): Promise<FirestoreUserProfile | null> {
+  const db = requireFirestoreDb();
+  const normalizedUid = requireUserId(uid);
+  const userSnap = await getDoc(doc(db, "users", normalizedUid));
+
+  if (!userSnap.exists()) {
+    return null;
+  }
+
+  return mapUserDataToProfile(userSnap.data());
+}
+
+/**
+ * Display Name으로 Firestore에서 사용자(`uid` 및 프로필)를 검색합니다.
+ * - `displayNames/{docId}` 인덱스 문서를 1차 조회하고, 미존재 또는 권한 제한 시 `users` 컬렉션을 조회합니다.
+ */
+export async function findUserByDisplayName(
+  displayName: string
+): Promise<ResolvedPublicUser | null> {
+  const db = requireFirestoreDb();
+  const cleanedDisplayName = sanitizeDisplayName(displayName);
+  const normalizedDisplayName = normalizeDisplayNameKey(cleanedDisplayName);
+
+  if (!normalizedDisplayName) {
+    return null;
+  }
+
+  const docId = getDisplayNameDocId(normalizedDisplayName);
+  const nameDocRef = doc(db, DISPLAY_NAMES_COLLECTION, docId);
+
+  let displayNamesPermissionDenied = false;
+
+  try {
+    const nameSnap = await getDoc(nameDocRef);
+    if (nameSnap.exists()) {
+      const nameData = nameSnap.data();
+      const uid =
+        typeof nameData?.uid === "string" ? nameData.uid.trim() : "";
+      if (uid) {
+        try {
+          const userProfile = await fetchUserProfile(uid);
+          if (userProfile) {
+            return {
+              uid,
+              profile: userProfile,
+            };
+          }
+        } catch (userError) {
+          if (!isPermissionDeniedError(userError)) {
+            throw userError;
+          }
+        }
+
+        const fallbackDisplayName =
+          typeof nameData?.displayName === "string" &&
+          nameData.displayName.trim()
+            ? sanitizeDisplayName(nameData.displayName)
+            : cleanedDisplayName;
+
+        return {
+          uid,
+          profile: {
+            displayName: fallbackDisplayName,
+            normalizedDisplayName,
+            bio: "",
+            avatarUrl: "",
+          },
+        };
+      }
+    }
+  } catch (error) {
+    if (!isPermissionDeniedError(error)) {
+      throw error;
+    }
+    displayNamesPermissionDenied = true;
+  }
+
+  // displayNames 인덱스 문서가 없는 기존 사용자나 권한 폴백을 위해 users 컬렉션 조회
+  try {
+    const normalizedQuery = query(
+      collection(db, "users"),
+      where("normalizedDisplayName", "==", normalizedDisplayName),
+      limit(1)
+    );
+    const normalizedSnap = await getDocs(normalizedQuery);
+    if (!normalizedSnap.empty) {
+      const userDoc = normalizedSnap.docs[0];
+      return {
+        uid: userDoc.id,
+        profile: mapUserDataToProfile(userDoc.data()),
+      };
+    }
+
+    const exactQuery = query(
+      collection(db, "users"),
+      where("displayName", "==", cleanedDisplayName),
+      limit(1)
+    );
+    const exactSnap = await getDocs(exactQuery);
+    if (!exactSnap.empty) {
+      const userDoc = exactSnap.docs[0];
+      return {
+        uid: userDoc.id,
+        profile: mapUserDataToProfile(userDoc.data()),
+      };
+    }
+
+    return null;
+  } catch (usersQueryError) {
+    if (isPermissionDeniedError(usersQueryError)) {
+      if (displayNamesPermissionDenied) {
+        throw new DisplayNamePermissionError(
+          "Firestore 보안 규칙에서 사용자 프로필 조회(displayNames 또는 users 컬렉션 읽기) 권한이 필요합니다."
+        );
+      }
+      return null;
+    }
+    throw usersQueryError;
+  }
 }
 
 /**

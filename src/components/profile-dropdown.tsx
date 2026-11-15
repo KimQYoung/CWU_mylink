@@ -19,6 +19,7 @@ import { Button } from "@/components/ui/button";
 import { UserAvatar } from "@/components/user-avatar";
 import { getDisplayNameFromAuthUser } from "@/lib/firebase-auth";
 import { getUserLinksPath } from "@/lib/firestore-links";
+import { buildPublicProfileHref } from "@/lib/firestore-profile";
 import { useResolvedUserProfile } from "@/lib/queries/user-data";
 import { useProfileStore } from "@/lib/store";
 import { cn } from "@/lib/utils";
@@ -54,6 +55,7 @@ export function ProfileDropdown({ onToast }: ProfileDropdownProps) {
 
   const displayName =
     profile.name?.trim() || getDisplayNameFromAuthUser(authUser);
+  const personalPageHref = buildPublicProfileHref(displayName);
   const avatarSrc = profile.avatarUrl || authUser.photoURL;
   const linksPath = getUserLinksPath(authUser.uid);
   const shortUid =
@@ -92,12 +94,11 @@ export function ProfileDropdown({ onToast }: ProfileDropdownProps) {
   };
 
   const handleCopyPublicUrl = () => {
-    const publicPath = `/${profile.username}`;
     const fullUrl =
       typeof window !== "undefined"
-        ? `${window.location.origin}${publicPath}`
-        : publicPath;
-    copyText(fullUrl, "publicUrl", `PUBLIC URL COPIED: ${publicPath}`);
+        ? `${window.location.origin}${personalPageHref}`
+        : personalPageHref;
+    copyText(fullUrl, "publicUrl", `PUBLIC URL COPIED: /${displayName}`);
   };
 
   return (
@@ -228,7 +229,7 @@ export function ProfileDropdown({ onToast }: ProfileDropdownProps) {
                 <span className="inline-flex items-center gap-2 min-w-0">
                   <Copy className="size-3.5 text-body-mid shrink-0" strokeWidth={1.5} />
                   <span className="truncate">
-                    내 공개 링크 복사 (/{profile.username})
+                    내 공개 링크 복사 (/{displayName})
                   </span>
                 </span>
                 {copiedKey === "publicUrl" && (
@@ -263,12 +264,15 @@ export function ProfileDropdown({ onToast }: ProfileDropdownProps) {
 
               <Menu.LinkItem
                 closeOnClick
-                render={<Link href={`/${profile.username}`} />}
+                render={<Link href={personalPageHref} />}
                 className={MENU_ITEM_CLASS}
               >
-                <span className="inline-flex items-center gap-2">
+                <span className="inline-flex items-center gap-2 min-w-0">
                   <ExternalLink className="size-3.5 text-body-mid shrink-0" strokeWidth={1.5} />
-                  <span>공개 프로필 보기</span>
+                  <span className="truncate">개인 페이지로 이동</span>
+                </span>
+                <span className="font-mono text-[10px] text-body-mid truncate max-w-28">
+                  /{displayName}
                 </span>
               </Menu.LinkItem>
 
