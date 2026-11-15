@@ -1,7 +1,7 @@
 # [PRD] 링크트리 클론 서비스: 마이링크 (MyLink)
 
-> **버전**: v1.1.0 (MVP + Analytics)  
-> **작성일**: 2026-11-12  
+> **버전**: v1.2.0 (MVP + Analytics + shadcn/ui × DESIGN.md)  
+> **작성일**: 2026-11-15  
 > **상태**: 승인 및 구현 준비 완료  
 > **작성 대상**: 프론트엔드 엔지니어링 및 프로토타입 구현팀  
 
@@ -13,8 +13,11 @@
 **마이링크(MyLink)**는 크리에이터, 개발자, 인플루언서가 자신의 모든 소셜 채널과 포트폴리오, 프로젝트 링크를 단 하나의 URL(`/[username]`)로 통합하여 공유하고, 방문자의 유입 및 클릭 성과를 한눈에 분석할 수 있는 **링크트리(Linktree) 스타일의 다중 사용자 마이크로 프로필 SaaS 서비스**입니다.
 
 ### 1.2 개발 전략 및 MVP 범위
-- **빠른 프로토타이핑을 위한 Mock 기반 아키텍처**:
-  - 초기 단계에서는 외부 DB/인증 인프라 연동 비용을 최소화하기 위해 **Mock 데이터 + LocalStorage** 기반으로 동작하는 고도화된 프론트엔드 완결형 프로토타입을 구축합니다.
+- **빠른 프로토타이핑을 위한 Mock/더미 데이터 기반 아키텍처**:
+  - 초기 단계에서는 외부 DB/인증 인프라 연동 비용을 최소화하기 위해 **더미(Mock) 데이터 + LocalStorage** 기반으로 동작하는 고도화된 프론트엔드 완결형 프로토타입을 구축합니다.
+  - `src/lib/dummy-links.ts`에 정의된 링크 목록 더미 데이터(`DUMMY_LINKS`, 총 7개 엔드포인트)와 7일치 통계 더미 데이터(`DUMMY_ANALYTICS`)를 기본 프로필(`DEFAULT_PROFILE`)로 사전 시딩(Pre-seeding)하고 Zustand `persist`(`localStorage`)와 연동하여, 별도 백엔드 없이도 초기 진입 즉시 풍부한 UI·인터랙션·애널리틱스를 테스트할 수 있도록 합니다.
+- **shadcn/ui × DESIGN.md 디자인 시스템 구축**:
+  - 접근성과 확장성이 검증된 **shadcn/ui** 컴포넌트 아키텍처를 기반으로 하되, 모든 UI 프리미티브(Button, Card, Input, Tabs 등)의 스타일과 토큰은 [`DESIGN.md`](./DESIGN.md)의 **xAI Minimal Dark 디자인 시스템**(단일 `#0a0a0a` 다크 캔버스, Weight 400 타이포그래피, `9999px` 아웃라인 필 버튼, `1px` 헤어라인 보더, 무그림자 원칙)에 맞추어 커스터마이징합니다.
 - **실시간 2-패널 빌더 UI**:
   - 링크트리의 시그니처 경험인 **좌측 에디터(편집 패널) + 우측 스마트폰 라이브 미리보기(Live Preview)**를 구현합니다.
 - **테마 프리셋 시스템**:
@@ -130,6 +133,7 @@ flowchart TD
 | FR-2.3 | 링크 삭제 (Delete) | 특정 링크를 목록에서 영구 제거 | P0 |
 | FR-2.4 | 링크 활성화 토글 (Visibility) | 공개 페이지에 해당 링크를 노출할지 여부를 Switch/Toggle로 제어 | P0 |
 | FR-2.5 | 순서 변경 (Reorder) | 링크 카드를 위/아래 버튼(또는 드래그 앤 드롭)으로 순서 재배치 | P0 |
+| FR-2.6 | 기본 더미 데이터 시딩 및 초기화 | 최초 접속 및 기본값 복원(`resetToDefault`) 시 개발자 페르소나 기반의 7개 더미 링크 목록(`DUMMY_LINKS`: 활성 6건 + 비활성 토글 테스트용 1건)을 즉시 제공 | P0 |
 
 ### 4.3 [FR-3] 관리자 대시보드 (Admin 2-Panel Builder)
 | ID | 기능명 | 설명 | 우선순위 |
@@ -164,6 +168,17 @@ flowchart TD
 | FR-6.4 | 실시간 이벤트 트래킹 | • 공개 프로필(`/[username]`) 로드시 `Views` 자동 +1 (세션 중복 방지 로직 포함)<br>• 링크 버튼 클릭 시 해당 링크의 `clicks` 필드 +1 카운트 및 당일 통계에 반영<br>• LocalStorage에 실시간 반영되어 관리자 대시보드에서 새로고침 없이 즉시 확인 가능 | P0 |
 | FR-6.5 | 통계 데이터 초기화 및 Mock 시딩 | • 통계 지표가 비어 있을 때 보기 좋은 7일치 데모 데이터 자동 시딩 기능<br>• 사용자가 원할 경우 클릭 카운터를 0으로 초기화할 수 있는 '통계 리셋' 액션 | P1 |
 
+### 4.7 [FR-7] 디자인 시스템 및 UI 컴포넌트 규격 (`shadcn/ui` × `DESIGN.md`)
+모든 UI 컴포넌트는 `shadcn/ui`(`@/components/ui/*`, `@base-ui/react` + CVA)를 기반으로 구축하되, 스타일·색상·형태·타이포그래피는 [`DESIGN.md`](./DESIGN.md)의 **xAI Minimal Dark 디자인 언어**를 따르도록 커스터마이징합니다.
+
+| ID | 대상 컴포넌트 / 토큰 | `shadcn/ui` 기반 커스터마이징 규격 (`DESIGN.md` 준수) | 우선순위 |
+|---|---|---|:---:|
+| FR-7.1 | **CSS 변수 & 테마 토큰** | • Tailwind CSS v4 `@theme inline` (`src/app/globals.css`) 기반 Config-less 토큰 관리<br>• `--background: #0a0a0a`, `--card: #191919`, `--border: #212327`, `--primary: #ffffff`, `--primary-foreground: #0a0a0a` 매핑<br>• `--radius: 8px` (`rounded-sm`/`rounded-lg` 카드 규격), 버튼은 `9999px` (`rounded-full`) 고정 | P0 |
+| FR-7.2 | **Button (`ui/button`)** | • `variant="outline"` (기본 CTA): 투명 배경(`#0a0a0a`), `1px solid rgba(255,255,255,0.25)` 보더, `rounded-full` (9999px Pill)<br>• `variant="default"` (핵심 Sign Up / Copy CTA): `#ffffff` 배경, `#0a0a0a` 텍스트, `rounded-full` (9999px Pill)<br>• Bold 금지 (`font-normal`, Weight 400 유지) | P0 |
+| FR-7.3 | **Card (`ui/card`)** | • 배경 `#191919` (`canvas-card`), `1px solid #212327` (`hairline`) 보더<br>• `8px` 모서리 라운드, **그림자 완전 제거 (`shadow-none`)** — 헤어라인 보더만으로 깊이감 표현 | P0 |
+| FR-7.4 | **Input / Textarea / Tabs (`ui/*`)** | • 배경 `#1a1c20` (`canvas-soft`), `1px solid #212327` 보더, `8px` 라운드<br>• 포커스 시 과도한 글로우 대신 화이트/헤어라인 톤의 절제된 링 적용 | P0 |
+| FR-7.5 | **Typography & Iconography** | • 디스플레이/본문 전체 **Weight 400** 고정, 디스플레이 음수 자간(`-0.035em` ~ `-0.02em`)<br>• 섹션 아이브로우·지표 라벨은 `Geist Mono` 대문자 + `+1.4px` 자간<br>• 아이콘은 `lucide-react` 1.5px 스트로크 기반 모노크롬 스타일 사용 | P0 |
+
 ---
 
 ## 5. Technical Architecture & Data Model (기술 설계 및 데이터)
@@ -171,9 +186,10 @@ flowchart TD
 ### 5.1 기술 스택
 - **Framework**: Next.js 16 (App Router)
 - **Language**: TypeScript 5
-- **Styling**: Tailwind CSS v3 (안정성 및 고성능 보장)
+- **Styling**: **Tailwind CSS v4** (`@tailwindcss/postcss`, 별도 `tailwind.config` 파일 없는 CSS-first `@theme inline` 아키텍처)
+- **UI Design System**: **shadcn/ui** (`@base-ui/react`, `class-variance-authority`, `tw-animate-css`, `cn`) — [`DESIGN.md`](./DESIGN.md)의 xAI 디자인 시스템 규격(단일 `#0a0a0a` 캔버스, Weight 400, Pill 버튼, Hairline 카드)으로 테마 토큰 및 컴포넌트 변형(Variants) 커스터마이징
 - **State Management**: **Zustand v5** (초경량 반응형 상태 관리, `persist` 미들웨어 기반 `localStorage` 자동 영속화 및 2-패널 선택자 최적화)
-- **Icons**: Lucide Icons / Custom SVG Icons
+- **Icons**: **Lucide React** (`lucide-react`) / Custom SVG Icons
 - **Data Visualization**: Pure Tailwind CSS + SVG Charts (별도 무거운 차트 패키지 없이 0ms 로딩)
 
 ### 5.2 핵심 데이터 스키마 및 Zustand 스토어 (TypeScript Types)
@@ -233,6 +249,27 @@ export interface MyLinkState {
 }
 ```
 
+### 5.3 기본 더미 데이터 명세 (`src/lib/dummy-links.ts`)
+
+- **설계 목적**: 백엔드 및 DB 연동 전 단계에서도 빈 화면(Cold Start) 없이 링크 목록 렌더링, 온/오프 토글, 클립보드 이메일 복사 액션, 클릭률(CTR) 및 7일 추이 차트를 즉시 검증할 수 있도록 기본 더미 데이터를 사용합니다.
+- **링크 목록 더미 데이터 (`DUMMY_LINKS`, 총 7건)**:
+
+| 라벨 | ID | 제목 | 대상 URL / 액션 | 활성화 (`isActive`) | 초기 클릭수 (`clicks`) |
+|---|---|---|---|:---:|:---:|
+| ENDPOINT 01 | `link-github` | GitHub Repository & Telemetry | `https://github.com/KimQYoung` | `true` | 214 |
+| ENDPOINT 02 | `link-project-mylink` | CWU_mylink Source Protocol | `https://github.com/KimQYoung/CWU_mylink` | `true` | 168 |
+| ENDPOINT 03 | `link-portfolio` | System Architecture & Portfolio | `https://notion.so/kimqyoung-portfolio` | `true` | 132 |
+| ENDPOINT 04 | `link-blog` | Engineering Log & Vibe Coding Notes | `https://velog.io/@kimqyoung` | `true` | 95 |
+| ENDPOINT 05 | `link-linkedin` | LinkedIn Professional Profile | `https://www.linkedin.com/in/kimqyoung` | `true` | 54 |
+| ENDPOINT 06 | `link-contact` | Direct Communication | 클립보드 복사 (`actionType: "copy-email"`) | `true` | 41 |
+| ENDPOINT 07 | `link-archive-hackathon` | 2026 AI Vibe Coding Hackathon Demo | `https://vibe-hackathon-demo.vercel.app` | `false` | 76 |
+
+- **통계 더미 데이터 (`DUMMY_ANALYTICS`)**:
+  - 최근 7일(`2026-11-09` ~ `2026-11-15`) 일별 조회수(`views`) 및 클릭수(`clicks`) 시계열 데이터를 제공합니다.
+  - 누적 조회수(`totalViews`): **1,950회**, 누적 클릭수(`totalClicks`): **780회** (평균 CTR **40.0%**, `DUMMY_LINKS` 7개 항목의 `clicks` 총합과 100% 일치).
+- **LocalStorage 마이그레이션 정책 (`src/lib/store.ts`)**:
+  - Zustand `persist` 미들웨어에 스키마 버전(`version: 2`)과 `migrate` 함수를 적용하여, 기존 브라우저 `localStorage`에 구버전 기본 링크(3건)만 남아 있는 경우에도 최신 7건 더미 데이터(`DUMMY_LINKS`)와 `DUMMY_ANALYTICS`로 자동 마이그레이션됩니다. (사용자가 직접 수정·추가한 커스텀 링크 목록은 그대로 보존됩니다.)
+
 ---
 
 ## 6. Implementation Roadmap & Milestones (구현 마일스톤)
@@ -241,11 +278,12 @@ export interface MyLinkState {
 gantt
     title 마이링크 (MyLink) MVP + 통계 기능 구현 타임라인
     dateFormat  YYYY-MM-DD
-    section Phase 1: 데이터 & 상태
+    section Phase 1: 디자인 & 상태
+    Tailwind v4 + shadcn/ui 초기화 및 DESIGN.md 토큰 커스터마이징 :p0, 2026-11-15, 1d
     Zustand 스토어 모델 정의 및 persist 기반 LocalStorage 연동 :p1, 2026-11-12, 1d
     기본 목업 프로필 및 7일치 통계 시딩 :after p1, 1d
     section Phase 2: 대시보드 빌더
-    2-패널 관리자 화면 레이아웃 (/admin) :p2, after p1, 1d
+    shadcn/ui 기반 2-패널 관리자 화면 레이아웃 (/admin) :p2, after p0, 1d
     링크 CRUD 및 순서 변경/토글 구현 :after p2, 1d
     테마 프리셋 스위처 연동 :after p2, 1d
     section Phase 3: 통계 대시보드
@@ -262,7 +300,6 @@ gantt
 
 ## 7. Success Metrics (성공 지표)
 1. **사용성**: 대시보드에서 링크를 추가하고 저장했을 때 0.1초 이내에 라이브 프리뷰에 즉시 반영되는가?
-2. **테마 일관성**: xAI, Neobrutalism 테마 전환 시 디자인 가이드라인의 규격을 오차 없이 표현하는가?
+2. **디자인 시스템 정합성**: `shadcn/ui` 기반 컴포넌트가 [`DESIGN.md`](./DESIGN.md)의 xAI 디자인 규격(Weight 400, 9999px Pill 버튼, `#191919` 카드, `#212327` 헤어라인 보더, 무그림자 원칙)과 다중 테마 프리셋을 오차 없이 표현하는가?
 3. **통계 정확도 및 실시간성**: 공개 페이지 방문 및 링크 클릭 시 0ms 지연으로 카운트가 기록되고 대시보드 차트에 오차 없이 반영되는가?
 4. **반응형 안정성**: 모바일 300px~375px 및 데스크톱에서 모든 텍스트, 버튼, 통계 위젯이 깨짐 없이 완벽하게 동작하는가?
-

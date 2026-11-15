@@ -1,6 +1,18 @@
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 import { UserProfile, LinkItem } from "../types";
+import { DUMMY_ANALYTICS, DUMMY_LINKS } from "./dummy-links";
+
+export { DUMMY_ANALYTICS, DUMMY_LINKS };
+
+const LEGACY_DEFAULT_LINK_IDS = ["link-github", "link-project", "link-contact"];
+
+function isLegacyDefaultLinks(links: LinkItem[] | undefined): boolean {
+  if (!Array.isArray(links) || links.length !== LEGACY_DEFAULT_LINK_IDS.length) {
+    return false;
+  }
+  return links.every((link, index) => link.id === LEGACY_DEFAULT_LINK_IDS[index]);
+}
 
 export const DEFAULT_PROFILE: UserProfile = {
   username: "KimQYoung",
@@ -38,42 +50,8 @@ export const DEFAULT_PROFILE: UserProfile = {
       desc: "Rapid generative iteration, AI-native workflows, and prototype acceleration.",
     },
   ],
-  links: [
-    {
-      id: "link-github",
-      endpointLabel: "ENDPOINT 01",
-      displayUrl: "github.com/KimQYoung",
-      title: "GitHub Repository & Telemetry",
-      description: "Open-source contributions, public repositories, and commit activity logs.",
-      url: "https://github.com/KimQYoung",
-      buttonText: "Open GitHub ↗",
-      isActive: true,
-      order: 1,
-    },
-    {
-      id: "link-project",
-      endpointLabel: "ENDPOINT 02",
-      displayUrl: "CWU_mylink",
-      title: "CWU_mylink Source Protocol",
-      description: "Next.js 16 full-stack profile implementation engineered according to xAI design language specifications.",
-      url: "https://github.com/KimQYoung/CWU_mylink",
-      buttonText: "View Source ↗",
-      isActive: true,
-      order: 2,
-    },
-    {
-      id: "link-contact",
-      endpointLabel: "ENDPOINT 03",
-      displayUrl: "Direct Communication",
-      title: "Direct Communication",
-      description: "For technical queries, architecture discussions, or collaboration inquiries.",
-      buttonText: "Copy Address",
-      isAction: true,
-      actionType: "copy-email",
-      isActive: true,
-      order: 3,
-    },
-  ],
+  links: DUMMY_LINKS,
+  analytics: DUMMY_ANALYTICS,
 };
 
 interface ProfileStore {
@@ -119,7 +97,12 @@ export const useProfileStore = create<ProfileStore>()(
               ...state.profile,
               links: [
                 ...state.profile.links,
-                { ...newLink, id, order: nextOrder },
+                {
+                  ...newLink,
+                  id,
+                  order: nextOrder,
+                  clicks: newLink.clicks ?? 0,
+                },
               ],
             },
           };
@@ -147,7 +130,39 @@ export const useProfileStore = create<ProfileStore>()(
     }),
     {
       name: "mylink_profile_storage", // LocalStorage 키 이름
+      version: 2,
       storage: createJSONStorage(() => localStorage),
+      migrate: (persistedState: unknown, version: number): ProfileStore => {
+        const persisted = persistedState as Partial<ProfileStore> | null | undefined;
+        if (!persisted?.profile) {
+          return { profile: DEFAULT_PROFILE } as ProfileStore;
+        }
+
+        if (version < 2) {
+          const existingProfile = persisted.profile;
+          const useNewDummyLinks =
+            !Array.isArray(existingProfile.links) ||
+            existingProfile.links.length === 0 ||
+            isLegacyDefaultLinks(existingProfile.links);
+
+          return {
+            ...persisted,
+            profile: {
+              ...DEFAULT_PROFILE,
+              ...existingProfile,
+              links: useNewDummyLinks
+                ? DUMMY_LINKS
+                : existingProfile.links.map((link) => ({
+                    ...link,
+                    clicks: link.clicks ?? 0,
+                  })),
+              analytics: existingProfile.analytics ?? DUMMY_ANALYTICS,
+            },
+          } as ProfileStore;
+        }
+
+        return persisted as ProfileStore;
+      },
     }
   )
 );
